@@ -43,9 +43,11 @@ Session data comes from [cc-menubar](../cc-menubar), which already polls every h
   Closed. Ordering is doing first, then ★, then due date, then oldest. **Repo boards** is one card per project, with your
   tasks next to that repo's TODO files and live sessions.
 - **Your tasks** live in `tasks/tasks.md` (first imported from Todolist's CSV export: `tasks.py import-todoist <csv>`).
-  In the tab: add (start with `! ` for high priority), tick, ☆ star, and click a task for Start/Pause, a due date, moving
+  In the tab: add (start with `! ` for high priority, `- ` to skip Claude's review, or both: `! - …`), tick, ☆ star, and click a task for Start/Pause, a due date, moving
   it to another project, editing the text, or dropping it. Project headings link to repos (`## OCR · repo: ocr-bench`).
-  Dates and priority are kept in the item's comment: `<!-- t:id pri:high due:2026-12-01 added:… since:… done:… -->`.
+  **Skip review** (or the `- ` prefix) marks a task `review:skip`: it is never reviewed automatically, but **Review now**
+  still works. In Yours, each section is grouped by project.
+  Dates, priority and the skip mark are kept in the item's comment: `<!-- t:id pri:high review:skip due:2026-12-01 added:… -->`.
 - **Claude reviews each task you add:** is it clear (with up to 2 questions), a one-line restatement, a 3–5 line
   proposal, the files involved, size S/M/L, and whether it needs a GPU (then it names the RTX host). This runs
   `claude -p` locally in the repo with read-only tools and the room hooks off, about 15 s and $0.10–0.15 a task.

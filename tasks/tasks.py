@@ -4,7 +4,8 @@
   tasks.py import-todoist dashboard.csv     add a Todoist CSV export to tasks.md (deduplicated)
   tasks.py add "<project>" "<task text>"    add one task (then reviews it in the background)
   tasks.py set <id> open|doing|done|dropped change a task's state
-  tasks.py edit <id> key=value …            change text=, project=, pri=high|"" or due=YYYY-MM-DD|""
+  tasks.py edit <id> key=value …            change text=, project=, pri=high|"", review=skip|"" or due=YYYY-MM-DD|""
+  (add: start the text with "! " for high priority, "- " to skip the review; both work: "! - text")
   tasks.py review [<id>…] [--all]           ask Claude whether new tasks are clear + for a short proposal
   tasks.py collect                          read tasks.md and the repos' TODO.md files into tasks.js
 
@@ -34,7 +35,7 @@ TASK_PROJECTS = {"claude task board and chatting room": "switchboard",
 
 HEAD_RE = re.compile(r"^##\s+(.+?)\s*$")
 ITEM_RE = re.compile(r"^- \[([ ~xX-])\]\s+(.*?)\s*(?:<!--\s*t:(\w+)((?:\s+\w+:\S+)*)\s*-->)?\s*$")
-META = ("pri", "due", "added", "since", "done")   # kept in the item's comment: <!-- t:id pri:high due:2026-12-01 … -->
+META = ("pri", "review", "due", "added", "since", "done")   # review:skip = never auto-reviewed   # kept in the item's comment: <!-- t:id pri:high due:2026-12-01 … -->
 
 
 def tid(project, text):
@@ -97,13 +98,14 @@ def repo_for(project, tasks):
 def add_task(project, text, repo=None):
     tasks = load_tasks()
     text = " ".join(text.split())
-    pri = ""
-    if text.startswith("! "):   # "! text" adds it as high priority
-        text, pri = text[2:].strip(), "high"
+    pri = skip = ""
+    while text[:2] in ("! ", "- "):   # "! " = high priority, "- " = no Claude review
+        pri, skip = (("high", skip) if text[0] == "!" else (pri, "skip"))
+        text = text[2:].strip()
     if repo is None:
         repo = repo_for(project, tasks)
     t = {"id": tid(project, text), "project": project, "repo": repo, "state": "open", "text": text,
-         "pri": pri, "due": "", "added": today(), "since": "", "done": ""}
+         "pri": pri, "review": skip, "due": "", "added": today(), "since": "", "done": ""}
     if any(x["id"] == t["id"] for x in tasks):
         return None
     # keep a project's tasks together
@@ -135,6 +137,8 @@ def edit_task(t, tasks, changes):
             tasks.insert(idx, t)
         elif k == "pri" and v in ("", "high"):
             t["pri"] = v
+        elif k == "review" and v in ("", "skip"):
+            t["review"] = v
         elif k == "due" and (v == "" or re.fullmatch(r"\d{4}-\d{2}-\d{2}", v)):
             t["due"] = v
         else:
@@ -302,8 +306,9 @@ def review_one(t):
 def review(ids=None, all_=False):
     tasks = [t for t in load_tasks() if t["state"] in ("open", "doing")]
     reviews = load_reviews()
-    todo = [t for t in tasks if (ids and t["id"] in ids) or (not ids and (all_ or t["id"] not in reviews
-                                                                           or "error" in reviews[t["id"]]))]
+    # an explicit id is always reviewed; otherwise tasks marked review:skip are left alone
+    todo = [t for t in tasks if (ids and t["id"] in ids) or (not ids and t["review"] != "skip" and
+                                                             (all_ or t["id"] not in reviews or "error" in reviews[t["id"]]))]
     if not todo:
         print("nothing to review")
         return
@@ -353,7 +358,7 @@ def main():
         if not t:
             return print("already there")
         print(f"added {t['id']}")
-        if "--no-review" not in a:   # review in the background, so adding returns at once
+        if "--no-review" not in a and t["review"] != "skip":   # review in the background, so adding returns at once
             subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "review", t["id"]], start_new_session=True,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     elif cmd in ("set", "edit"):

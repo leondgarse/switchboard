@@ -169,7 +169,12 @@
   .yfil .pf.on { color: var(--text); border-color: var(--accent); } .yfil .pf .n { opacity: .6; margin-left: 4px; }
   .yfil input[type=search] { background: var(--panel); border: 1px solid var(--line); color: var(--text); border-radius: 6px; font: 11.5px var(--mono); padding: 3px 8px; width: 180px; margin-left: auto; }
   .yfil label { color: var(--muted); display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
-  .ysec { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px 8px; margin-bottom: 10px; }
+  .ysec { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px 8px; margin-bottom: 14px; }
+  .ysec .pg { margin: 8px 0 14px; padding: 4px 0 2px 10px; border-left: 2px solid #3a3d47; }
+  .ysec .pg:last-child { margin-bottom: 4px; }
+  .ysec .pgh { display: flex; gap: 8px; align-items: baseline; font: 600 12px var(--mono); color: var(--text); margin: 0 0 4px; }
+  .ysec .pgh span[data-pf] { cursor: pointer; } .ysec .pgh span[data-pf]:hover { color: var(--accent); }
+  .ysec .pgr { font: 10.5px var(--mono); color: var(--muted); font-weight: 400; } .ysec .pgn { font: 10.5px var(--mono); color: var(--muted); font-weight: 400; margin-left: auto; }
   .ysec .sub { font: 600 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 4px 0; }
   .ri { display: flex; gap: 8px; padding: 2px 2px; font: 11.5px var(--mono); color: #c9ccd3; cursor: pointer; }
   .ri:hover { color: var(--text); } .ri .st { flex: none; width: 14px; }
@@ -228,7 +233,7 @@
 <body>
 <nav id="tabs"><button data-tab="arch" class="on">Architecture</button><button data-tab="sessions">Sessions<span class="badge" id="liveCount"></span></button><button data-tab="tasks">Tasks<span class="badge" id="taskCount"></span></button></nav>
 <div id="tasks"><div class="thead"><h2>tasks</h2><span id="tview"><button data-v="yours">Yours</button><button data-v="boards">Repo boards</button></span><span id="tmeta"></span>
-  <form id="tadd"><select id="tproj"></select><input id="ttext" placeholder="new task… (Enter adds it, “! ” first = high priority; Claude reviews it)" autocomplete="off"></form></div>
+  <form id="tadd"><select id="tproj"></select><input id="ttext" placeholder="new task… (Enter adds; Claude reviews it. Start with “! ” = high priority, “- ” = no review)" autocomplete="off"></form></div>
   <div id="tgrid"></div></div>
 <div id="sessions"><div class="shead"><h2>live sessions</h2><span id="smeta"></span><span class="hosts" id="shosts"></span>
   <span class="slegend"><span style="border-color:#7fd8d0"></span>room link<span style="border-color:var(--e-mentions);border-top-style:dashed"></span>related on the repo map (could talk)</span></div>
@@ -638,7 +643,8 @@ function taskRow(t, R, opts = {}) {
   let chip = '';
   if (t.state === 'doing') chip += '<span class="tc doing">doing</span>';
   if (t.due && active) chip += `<span class="tc ${late ? 'late' : 'due'}" title="due ${t.due}">${dueLabel(t.due)}</span>`;
-  if (active) chip += !rv ? '<span class="tc pending">reviewing…</span>' : rv.error ? '<span class="tc err" title="' + esc(rv.error) + '">review failed</span>'
+  if (active && t.review === 'skip' && !rv) chip += '<span class="tc pending" title="marked: no Claude review">no review</span>';
+  else if (active) chip += !rv ? '<span class="tc pending">reviewing…</span>' : rv.error ? '<span class="tc err" title="' + esc(rv.error) + '">review failed</span>'
     : `<span class="tc ${rv.clear ? 'clear' : 'unclear'}">${rv.clear ? '✓ clear' : '? unclear'}</span><span class="tc">${esc(rv.size || '')}</span>${rv.needs_gpu ? '<span class="tc gpu">GPU</span>' : ''}`;
   if (t.state === 'done' && t.done) chip += `<span class="tc due">${t.done.slice(5)}</span>`;
   let h = `<div class="ti${done || t.state === 'dropped' ? ' done' : ''}" data-tid="${t.id}"><span class="cb" data-act="toggle" title="${done ? 'reopen' : 'mark done'}"></span>`
@@ -655,7 +661,7 @@ function taskRow(t, R, opts = {}) {
       + `<pre>${esc(rv.proposal || '')}</pre>`
       + (rv.files && rv.files.length ? `<div class="fl">files: ${rv.files.map(esc).join(' · ')}</div>` : '')
       + (rv.needs_gpu ? `<div class="fl">needs a GPU: <code>ssh ${esc(rv.gpu_host || '')}</code></div>` : '');
-  } else h += rv && rv.error ? 'Review failed: ' + esc(rv.error) : 'Claude is reviewing this task…';
+  } else h += rv && rv.error ? 'Review failed: ' + esc(rv.error) : t.review === 'skip' ? 'No Claude review for this one (marked to skip).' : 'Claude is reviewing this task…';
   h += `<div class="fl">${esc(t.project)}${repo ? ' · repo ' + esc(repo) : ''}${t.added ? ' · added ' + t.added : ''}${t.since && t.state === 'doing' ? ' · doing since ' + t.since : ''}${t.done ? ' · closed ' + t.done : ''}</div>`;
   h += `<div class="btns">`
     + (active ? `<button class="small" data-act="${t.state === 'doing' ? 'pause' : 'start'}">${t.state === 'doing' ? 'Pause' : 'Start'}</button>` : '')
@@ -663,7 +669,8 @@ function taskRow(t, R, opts = {}) {
     + `<select data-act="move" title="move to project">${projects.map(p => `<option${p === t.project ? ' selected' : ''}>${esc(p)}</option>`).join('')}<option value="__new">new project…</option></select>`
     + `<button class="small" data-act="edit">Edit text</button>`
     + `<button class="small" data-act="send" ${repo ? '' : 'disabled'}>Send to ${esc(repo || 'repo')} sessions</button>`
-    + `<button class="small" data-act="rereview">Review again</button>`
+    + `<button class="small" data-act="rereview">${rv ? 'Review again' : 'Review now'}</button>`
+    + `<button class="small" data-act="skip" title="tasks marked to skip are never reviewed automatically">${t.review === 'skip' ? 'Allow auto review' : 'Skip review'}</button>`
     + (t.state === 'dropped' ? '' : `<button class="small danger" data-act="drop">Drop</button>`) + '</div></div>';
   return h;
 }
@@ -676,7 +683,7 @@ function renderTasks() {
   const mine = T.tasks.filter(t => t.state !== 'dropped');
   const openMine = mine.filter(t => t.state === 'open' || t.state === 'doing');
   const unclear = openMine.filter(t => R[t.id] && R[t.id].clear === false).length;
-  const pending = openMine.filter(t => !R[t.id]).length;
+  const pending = openMine.filter(t => !R[t.id] && t.review !== 'skip').length;
   document.getElementById('taskCount').textContent = openMine.length ? ' ' + openMine.length : '';
   const repoOpen = T.todos.reduce((a, f) => a + f.items.filter(i => i.state === 'open' || i.state === 'doing').length, 0);
   meta.innerHTML = `${openMine.length} of yours open${unclear ? ` · <span class="warn">${unclear} need an answer</span>` : ''}${pending ? ` · ${pending} being reviewed` : ''} · ${repoOpen} open in ${T.todos.length} repo TODO files`
@@ -740,12 +747,19 @@ function renderYours(T, R, grid) {
   let h = `<div class="ysum"><div><h3>next up</h3>${up.map((t, i) => `<div class="nx" data-jump="${t.id}"><b>${i + 1}</b>${t.pri === 'high' ? '★ ' : ''}${mdInline(t.text)}<span class="pj">· ${esc(t.project)}${t.due ? ' · ' + dueLabel(t.due) : ''}</span></div>`).join('') || '<div class="nx">nothing open</div>'}</div>`
     + `<div class="cnt"><b>${active.length}</b> open${active.some(t => t.state === 'doing') ? ` · <b>${all.filter(t => t.state === 'doing').length}</b> doing` : ''}<br>`
     + `${high ? `<b>${high}</b> ★ high · ` : ''}${late ? `<b style="color:var(--danger)">${late}</b> late · ` : ''}${soon ? `<b>${soon}</b> due this week · ` : ''}<b>${doneWeek}</b> done this week<br>`
-    + `${active.filter(t => !R[t.id]).length ? active.filter(t => !R[t.id]).length + ' being reviewed' : ''}</div></div>`;
+    + `${active.filter(t => !R[t.id] && t.review !== 'skip').length ? active.filter(t => !R[t.id] && t.review !== 'skip').length + ' being reviewed' : ''}</div></div>`;
   const counts = {}; for (const t of active) counts[t.project] = (counts[t.project] || 0) + 1;
   h += `<div class="yfil"><span class="pf${pf ? '' : ' on'}" data-pf="">all<span class="n">${active.length}</span></span>`
     + Object.entries(counts).map(([p, n]) => `<span class="pf${pf === p ? ' on' : ''}" data-pf="${esc(p)}">${esc(p)}<span class="n">${n}</span></span>`).join('')
     + `<input type="search" id="tq" placeholder="search…" value="${esc(tstate.q || '')}"><label><input type="checkbox" id="tclosed"${tstate.closed ? ' checked' : ''}>closed</label></div>`;
-  const sec = (title, list, empty) => `<div class="ysec"><div class="sub">${title} · ${list.length}</div>${list.map(t => taskRow(t, R, { project: !pf })).join('') || `<div class="fl" style="font:11.5px var(--mono);color:var(--muted)">${empty}</div>`}</div>`;
+  // within a section, one group per project (in tasks.md order), each with its own heading
+  const order = [...new Set(all.map(t => t.project))];
+  const groups = list => order.map(p => [p, list.filter(t => t.project === p)]).filter(([, l]) => l.length);
+  const sec = (title, list, empty) => `<div class="ysec"><div class="sub">${title} · ${list.length}</div>`
+    + (groups(list).map(([p, l]) => `<div class="pg"><div class="pgh"><span data-pf="${esc(p)}">${esc(p)}</span>`
+      + `${repoKey(l[0].repo) && repoKey(l[0].repo) !== p ? `<span class="pgr">${esc(repoKey(l[0].repo))}</span>` : ''}<span class="pgn">${l.length}</span></div>`
+      + l.map(t => taskRow(t, R)).join('') + '</div>').join('')
+      || `<div class="fl" style="font:11.5px var(--mono);color:var(--muted)">${empty}</div>`) + '</div>';
   if (doing.length) h += sec('in progress', doing, '');
   h += sec('next', next, q || pf ? 'nothing matches' : 'nothing open: add one above');
   if (tstate.closed) h += sec('closed', closed, 'none');
@@ -771,6 +785,7 @@ document.getElementById('tgrid').addEventListener('click', ev => {
   if (act === 'toggle') set(t.state === 'done' || t.state === 'dropped' ? 'open' : 'done');
   if (act === 'start') set('doing');
   if (act === 'pause') set('open');
+  if (act === 'skip') { t.review = t.review === 'skip' ? '' : 'skip'; renderTasks(); taskAction(['edit', id, 'review=' + t.review]); }
   if (act === 'pri') { t.pri = t.pri === 'high' ? '' : 'high'; renderTasks(); taskAction(['edit', id, 'pri=' + t.pri]); }
   if (act === 'edit') { const v = prompt('Task text:', t.text); if (v && v.trim() && v.trim() !== t.text) { t.text = v.trim(); renderTasks(); taskAction(['edit', id, 'text=' + t.text]); } }
   if (act === 'drop' && confirm('Drop this task? (it stays in tasks.md as [-])')) set('dropped');
