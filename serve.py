@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Serve the switchboard page locally so it can save edits and show live sessions.
 
-  python3 serve.py            # http://127.0.0.1:8765
+  python3 serve.py            # http://127.0.0.1:8767
 
 GET  /api/sessions                    -> cc-menubar's session snapshot (refreshed when stale)
 GET  /api/room                        -> the room server's state (links, messages, unread), if configured
@@ -17,7 +17,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8767
 PUBLIC = {"/": "index.html", "/index.html": "index.html", "/graph.js": "graph.js", "/tasks/tasks.js": "tasks/tasks.js"}
 TASK_CMDS = {"add", "set", "review", "collect", "send"}
 SNAPSHOT = Path.home() / ".cache" / "cc-menubar" / "sessions.json"

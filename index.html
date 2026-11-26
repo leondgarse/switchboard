@@ -476,7 +476,7 @@ function resumeCmd(s) {
 
 function renderSessions() {
   const grid = document.getElementById('sgrid'), meta = document.getElementById('smeta'), hostsEl = document.getElementById('shosts');
-  if (!SERVED) { grid.innerHTML = '<div class="empty">Live sessions need the local server: <code>python3 serve.py</code>, then open http://127.0.0.1:8765/</div>'; return; }
+  if (!SERVED) { grid.innerHTML = '<div class="empty">Live sessions need the local server: <code>python3 serve.py</code>, then open http://127.0.0.1:8767/</div>'; return; }
   const snap = live.snap;
   if (!snap) { grid.innerHTML = '<div class="empty">loading…</div>'; return; }
   if (!snap.generated) { grid.innerHTML = `<div class="empty">No session snapshot yet. ${snap.collector ? 'Collecting…' : 'Install cc-menubar (or set "ccMenubar" in config.json).'}</div>`; return; }
