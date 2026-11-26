@@ -216,6 +216,8 @@ def scan():
                             + r")(?![\w-])", re.I) for rid, al in aliases.items()}
     for rid, r in repos.items():
         hits = defaultdict(list)
+        if Path(r["path"]).resolve() == OUT:   # this map's own files name every repo; not real references
+            continue
         own = {r["name"].lower(), r["remote_name"].lower(), *r["packages"]}
         n = 0
         for f in r["_files"]:
@@ -280,7 +282,18 @@ def render(graph):
         saved, crossings = layout_mod.architecture(kept, graph["edges"], config.get("center"))
         print(f"architecture layout: {crossings} crossing(s) between columns", file=sys.stderr)
     pos = layout_mod.place_new(ids, graph["edges"], saved)
+    # repos that are gone from disk: drop their positions, box rows, routes and labels
+    alive = set(ids)
+    pos = {k: v for k, v in pos.items() if k.startswith("_") or k in alive}
+    pos["_kids"] = {p: [c for c in ks if c in alive] for p, ks in pos.get("_kids", {}).items() if p in alive}
+    pos["_routes"] = {k: v for k, v in pos.get("_routes", {}).items() if all(x in alive for x in k.split(">"))}
     LAYOUT_PATH.write_text(json.dumps(pos, indent=1) + "\n")
+    if LABELS_PATH.exists():
+        old = json.loads(LABELS_PATH.read_text())
+        kept = {k: v for k, v in old.items() if all(x in alive for x in k.split(">"))}
+        if len(kept) != len(old):
+            LABELS_PATH.write_text(json.dumps(kept, indent=1, ensure_ascii=False) + "\n")
+            print(f"dropped {len(old) - len(kept)} label(s) of repos no longer on disk", file=sys.stderr)
     labels = json.loads(LABELS_PATH.read_text()) if LABELS_PATH.exists() else {}
     (OUT / "graph.js").write_text("window.GRAPH = " + json.dumps(graph) + ";\nwindow.CONFIG = " + json.dumps(config)
                                   + ";\nwindow.LAYOUT = " + json.dumps(pos) + ";\nwindow.LABELS = " + json.dumps(labels) + ";\n")

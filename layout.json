@@ -43,32 +43,12 @@
   1768,
   18
  ],
- "ollama_local_essay_writer": [
-  1266,
-  117
- ],
- "mem0": [
-  0,
-  832.0
- ],
  "hermes-agent": [
   412,
   901.0
  ],
- "deepseek-harness": [
-  412,
-  809.0
- ],
- "msi5006_tests": [
-  0,
-  1109.0
- ],
  "cc-menubar": [
   272,
-  1109.0
- ],
- "draftway": [
-  544,
   1109.0
  ],
  "model_performance": [
@@ -122,16 +102,6 @@
    "keystone-ai-system/admin-ui",
    "keystone-ai-system/agent-service",
    "keystone-ai-system/test-cases"
-  ],
-  "mem0": [
-   "mem0/evaluation"
-  ],
-  "msi5006_tests": [
-   "msi5006_tests/c2pa-python",
-   "msi5006_tests/c2pa-rs",
-   "msi5006_tests/msd-sdk-python",
-   "msi5006_tests/msi5006_tests",
-   "msi5006_tests/zef"
   ]
  },
  "_shelf_y": 1069.0,
