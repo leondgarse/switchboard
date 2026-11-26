@@ -19,7 +19,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8767
 PUBLIC = {"/": "index.html", "/index.html": "index.html", "/graph.js": "graph.js", "/tasks/tasks.js": "tasks/tasks.js"}
-TASK_CMDS = {"add", "set", "review", "collect", "send"}
+TASK_CMDS = {"add", "set", "edit", "review", "collect", "send"}
 SNAPSHOT = Path.home() / ".cache" / "cc-menubar" / "sessions.json"
 STALE_AFTER = 15          # seconds; the menu bar app rewrites the snapshot every poll (~5 s)
 _refreshing = threading.Lock()

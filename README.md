@@ -38,19 +38,26 @@ Session data comes from [cc-menubar](../cc-menubar), which already polls every h
 
 `tasks/` puts your own task list next to every repo's `TODO.md`, one card per project.
 
+- **Two views.** **Yours** is one list of every task you wrote, across projects: a "next up" top 3, counts
+  (open, doing, ★ high, late, due this week, done this week), project filters and search, then In progress / Next /
+  Closed. Ordering is doing first, then ★, then due date, then oldest. **Repo boards** is one card per project, with your
+  tasks next to that repo's TODO files and live sessions.
 - **Your tasks** live in `tasks/tasks.md` (first imported from Todolist's CSV export: `tasks.py import-todoist <csv>`).
-  Add, tick and drop them in the tab. Project headings link to repos (`## OCR · repo: ocr-bench`).
+  In the tab: add (start with `! ` for high priority), tick, ☆ star, and click a task for Start/Pause, a due date, moving
+  it to another project, editing the text, or dropping it. Project headings link to repos (`## OCR · repo: ocr-bench`).
+  Dates and priority are kept in the item's comment: `<!-- t:id pri:high due:2026-12-01 added:… since:… done:… -->`.
 - **Claude reviews each task you add:** is it clear (with up to 2 questions), a one-line restatement, a 3–5 line
   proposal, the files involved, size S/M/L, and whether it needs a GPU (then it names the RTX host). This runs
   `claude -p` locally in the repo with read-only tools and the room hooks off, about 15 s and $0.10–0.15 a task.
   Results go to `tasks/reviews.json`. **Send to sessions** posts a task and its proposal to that repo's live
   sessions through the room.
-- **Repo TODO files** (anything named `TODO.md` that git tracks) are only read, never written: their open and
+- **Repo TODO files** (any `*TODO.md` that git tracks or would track, so a new one counts before its first commit; also in
+  repos the last scan hasn't seen yet) are re-read each time the tab opens. They are only read, never written: their open and
   in-progress items, counts, and a flag on files that aren't in the shared format. Click an item to open the file.
 - **The shared format** is `tasks/TODO_FORMAT.md`. To have sessions keep a repo's board in it, add one line to that repo's
   `CLAUDE.md`: `Keep TODO.md in the format of ~/workspace/switchboard/tasks/TODO_FORMAT.md.`
 
-    python3 tasks/tasks.py add|set|review|send|collect …   (the tab drives these too)
+    python3 tasks/tasks.py add|set|edit|review|send|collect …   (the tab drives these too)
 
 ## Room: sessions messaging each other across hosts
 

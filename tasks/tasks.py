@@ -4,6 +4,7 @@
   tasks.py import-todoist dashboard.csv     add a Todoist CSV export to tasks.md (deduplicated)
   tasks.py add "<project>" "<task text>"    add one task (then reviews it in the background)
   tasks.py set <id> open|doing|done|dropped change a task's state
+  tasks.py edit <id> key=value …            change text=, project=, pri=high|"" or due=YYYY-MM-DD|""
   tasks.py review [<id>…] [--all]           ask Claude whether new tasks are clear + for a short proposal
   tasks.py collect                          read tasks.md and the repos' TODO.md files into tasks.js
 
@@ -32,7 +33,8 @@ TASK_PROJECTS = {"claude task board and chatting room": "switchboard",
                  "a todo list that agent can auto track, pick, update": "switchboard"}
 
 HEAD_RE = re.compile(r"^##\s+(.+?)\s*$")
-ITEM_RE = re.compile(r"^- \[([ ~xX-])\]\s+(.*?)\s*(?:<!--\s*t:(\w+)\s*-->)?\s*$")
+ITEM_RE = re.compile(r"^- \[([ ~xX-])\]\s+(.*?)\s*(?:<!--\s*t:(\w+)((?:\s+\w+:\S+)*)\s*-->)?\s*$")
+META = ("pri", "due", "added", "since", "done")   # kept in the item's comment: <!-- t:id pri:high due:2026-12-01 … -->
 
 
 def tid(project, text):
@@ -55,8 +57,10 @@ def load_tasks():
         m = ITEM_RE.match(line)
         if m:
             text = m.group(2)
+            meta = dict(kv.split(":", 1) for kv in (m.group(4) or "").split())
             out.append({"id": m.group(3) or tid(project, text), "project": project, "repo": repo,
-                        "state": STATES[m.group(1)], "text": text, "line": i})
+                        "state": STATES[m.group(1)], "text": text, "line": i,
+                        **{k: meta.get(k, "") for k in META}})
     return out
 
 
@@ -71,21 +75,35 @@ def write_tasks(tasks):
         lines.append(f"## {project}" + (f" · repo: {repo}" if repo else ""))
         for t in tasks:
             if (t["project"], t["repo"]) == (project, repo):
-                lines.append(f"- [{MARK[t['state']]}] {t['text']} <!-- t:{t['id']} -->")
+                meta = "".join(f" {k}:{t[k]}" for k in META if t.get(k))
+                lines.append(f"- [{MARK[t['state']]}] {t['text']} <!-- t:{t['id']}{meta} -->")
         lines.append("")
     TASKS_MD.write_text("\n".join(lines))
+
+
+def today():
+    return time.strftime("%Y-%m-%d")
+
+
+def repo_for(project, tasks):
+    repo = next((t["repo"] for t in tasks if t["project"] == project), None)
+    if repo is None:
+        repo = PROJECT_REPOS.get(project.lower(), "")
+    if not repo and (WORKSPACE / project / ".git").exists():   # a project named after a repo links to it
+        repo = project
+    return repo
 
 
 def add_task(project, text, repo=None):
     tasks = load_tasks()
     text = " ".join(text.split())
+    pri = ""
+    if text.startswith("! "):   # "! text" adds it as high priority
+        text, pri = text[2:].strip(), "high"
     if repo is None:
-        repo = next((t["repo"] for t in tasks if t["project"] == project), None)
-        if repo is None:
-            repo = PROJECT_REPOS.get(project.lower(), "")
-        if not repo and (WORKSPACE / project / ".git").exists():   # a project named after a repo links to it
-            repo = project
-    t = {"id": tid(project, text), "project": project, "repo": repo, "state": "open", "text": text}
+        repo = repo_for(project, tasks)
+    t = {"id": tid(project, text), "project": project, "repo": repo, "state": "open", "text": text,
+         "pri": pri, "due": "", "added": today(), "since": "", "done": ""}
     if any(x["id"] == t["id"] for x in tasks):
         return None
     # keep a project's tasks together
@@ -93,6 +111,34 @@ def add_task(project, text, repo=None):
     tasks.insert(idx, t)
     write_tasks(tasks)
     return t
+
+
+def set_state(t, state):
+    if state not in MARK:
+        raise SystemExit(f"unknown state {state!r}")
+    if state != t["state"]:
+        t["done"] = today() if state in ("done", "dropped") else ""
+        t["since"] = today() if state == "doing" else ""
+    t["state"] = state
+
+
+def edit_task(t, tasks, changes):
+    for kv in changes:
+        k, _, v = kv.partition("=")
+        v = " ".join(v.split())
+        if k == "text" and v:
+            t["text"] = v
+        elif k == "project" and v and v != t["project"]:
+            t["project"], t["repo"] = v, repo_for(v, [x for x in tasks if x is not t])
+            tasks.remove(t)   # move it to the end of its new project
+            idx = max((i for i, x in enumerate(tasks) if x["project"] == v), default=len(tasks) - 1) + 1
+            tasks.insert(idx, t)
+        elif k == "pri" and v in ("", "high"):
+            t["pri"] = v
+        elif k == "due" and (v == "" or re.fullmatch(r"\d{4}-\d{2}-\d{2}", v)):
+            t["due"] = v
+        else:
+            raise SystemExit(f"can't set {kv!r}")
 
 
 def import_todoist(path):
@@ -164,12 +210,30 @@ def clean(s):
     return s.replace("`", "").replace("**", "").replace("~~", "").strip()[:300]
 
 
+def repo_list():
+    """Repos from the last scan, plus top-level repos under ~/workspace that it hasn't seen yet."""
+    try:
+        nodes = [{"id": n["id"], "path": n["path"]} for n in json.loads((ROOT_DIR / "graph.json").read_text())["nodes"]]
+    except (OSError, ValueError, KeyError):
+        nodes = []
+    known = {os.path.realpath(n["path"]) for n in nodes}
+    try:
+        excluded = set(json.loads((ROOT_DIR / "config.json").read_text()).get("exclude", []))
+    except (OSError, ValueError):
+        excluded = set()
+    for g in sorted(WORKSPACE.glob("*/.git")):
+        if os.path.realpath(g.parent) not in known and g.parent.name not in excluded:
+            nodes.append({"id": g.parent.name, "path": str(g.parent)})
+    return nodes
+
+
 def repo_todos():
-    graph = json.loads((ROOT_DIR / "graph.json").read_text())
+    """Every TODO.md in each repo that git tracks or would track (new files count before their first commit)."""
     out = []
-    for n in graph["nodes"]:
+    for n in repo_list():
         try:
-            files = subprocess.run(["git", "-C", n["path"], "ls-files", "*TODO.md", "TODO.md"],
+            files = subprocess.run(["git", "-C", n["path"], "ls-files", "--cached", "--others", "--exclude-standard",
+                                    "*TODO.md", "TODO.md"],
                                    capture_output=True, text=True, timeout=10).stdout.split()
         except (OSError, subprocess.SubprocessError):
             continue
@@ -292,11 +356,12 @@ def main():
         if "--no-review" not in a:   # review in the background, so adding returns at once
             subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "review", t["id"]], start_new_session=True,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    elif cmd == "set":
+    elif cmd in ("set", "edit"):
         tasks = load_tasks()
-        for t in tasks:
-            if t["id"] == a[0]:
-                t["state"] = a[1]
+        t = next((x for x in tasks if x["id"] == a[0]), None)
+        if not t:
+            raise SystemExit("no task " + a[0])
+        set_state(t, a[1]) if cmd == "set" else edit_task(t, tasks, a[1:])
         write_tasks(tasks)
         collect()
     elif cmd == "send":
