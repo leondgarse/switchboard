@@ -20,14 +20,16 @@ session needs to know or answer something.
   {ROOM} who                         sessions (live/exited), what they do, their links
   {ROOM} send <to> "msg" [--ask]     to = name@host (as in `who`) | id prefix | link:NAME | repo:REPO
   {ROOM} send <to> --re <id> "msg"   answer message #id
-  {ROOM} wait <id> [--timeout 1800]  block until #id is answered (run as a background command)
+  {ROOM} wait <id> [--timeout 1800]  block until #id is answered. Run it as a background command whenever you
+                                     need an answer: it wakes this session when the answer arrives, even if idle
   {ROOM} inbox [--peek]              unread messages (they also arrive on their own as "[room]" context)
   {ROOM} status "now: …"             one line on what this session is doing, shown to others
   {ROOM} link list | create NAME "purpose" | join NAME [--repo [REPO]] [--watch GLOB]… | leave NAME [--repo [REPO]]
                                      links group sessions or whole repos on one topic; files matching
                                      --watch globs (repo-relative) auto-notify the link when edited
   {ROOM} thread [NAME]               recent messages (all, or one link)
-Keep messages short and concrete. Don't poll; answers come to you."""
+Keep messages short and concrete. Don't poll. Don't end a turn saying you are waiting for an answer
+unless `room wait` is running in the background; an idle session gets messages only at its next prompt."""
 
 
 def cfg():
@@ -274,8 +276,9 @@ def cmd_send(args):
     r = api("POST", "/send", {"session": sid, "to": args[0], "body": " ".join(args[1:]),
                               "kind": "reply" if re_ else ("ask" if ask else "notify"), "reply_to": int(re_) if re_ else None})
     print(f"sent #{r['id']} to {len(r['recipients'])} session(s)")
-    if ask:
-        print(f"to wait for the answer: {ROOM} wait {r['id']}  (as a background command)")
+    if not re_:
+        print(f"if you need the answer: run `{ROOM} wait {r['id']}` as a background command now. It ends when the answer "
+              "arrives and wakes this session even if it is idle; without it, you only see the answer at your next prompt.")
 
 
 def cmd_inbox(args):
