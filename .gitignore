@@ -4,3 +4,4 @@ graph.js
 vault/
 __pycache__/
 .DS_Store
+tasks/tasks.js

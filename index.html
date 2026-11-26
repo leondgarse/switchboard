@@ -115,6 +115,45 @@
   #tabs .badge { color: var(--s-idle); margin-left: 4px; }
   body.tab-sessions #map, body.tab-sessions #controls, body.tab-sessions #panel, body.tab-sessions #hint { display: none !important; }
   body:not(.tab-sessions) #sessions { display: none; }
+  body.tab-tasks #map, body.tab-tasks #controls, body.tab-tasks #panel, body.tab-tasks #hint { display: none !important; }
+  body:not(.tab-tasks) #tasks { display: none; }
+
+  /* tasks tab */
+  #tasks { position: absolute; inset: 0; overflow: auto; padding: 64px 28px 40px; }
+  #tasks .thead { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; font: 12px var(--mono); color: var(--muted); }
+  #tasks .thead h2 { margin: 0; font: 600 14px var(--mono); color: var(--text); }
+  #tasks .thead .warn { color: var(--a-warm); }
+  #tadd { display: flex; gap: 6px; margin-left: auto; }
+  #tadd select, #tadd input { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font: 12px var(--mono); }
+  #tadd input { width: 360px; } #tadd input:focus, #tadd select:focus { outline: 1px solid var(--accent); }
+  #tgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 14px; align-items: start; }
+  .pcard { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; position: relative; }
+  .pcard .ph { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .pcard .ph .pn { font: 600 13px var(--mono); } .pcard .ph .pr { font: 11px var(--mono); color: var(--muted); cursor: pointer; }
+  .pcard .ph .pr:hover { color: var(--accent); }
+  .pcard .ph .sq { display: inline-flex; gap: 3px; margin-left: auto; }
+  .pcard .ph .sq i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+  .pcard .sub { font: 600 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 10px 0 4px; display: flex; gap: 8px; }
+  .pcard .sub .fmt { color: var(--a-warm); letter-spacing: 0; text-transform: none; font-weight: 400; }
+  .ti { display: flex; gap: 8px; align-items: flex-start; padding: 4px 2px; border-top: 1px solid #2a2c33; font: 12px var(--mono); }
+  .ti:first-of-type { border-top: 0; }
+  .ti .cb { width: 13px; height: 13px; border: 1.3px solid #6b6f7a; border-radius: 3px; flex: none; margin-top: 2px; cursor: pointer; }
+  .ti .cb:hover { border-color: var(--s-idle); }
+  .ti.done .tx { text-decoration: line-through; color: var(--muted); } .ti.done .cb { background: var(--s-idle); border-color: var(--s-idle); }
+  .ti .tx { flex: 1; line-height: 1.45; cursor: pointer; word-break: break-word; }
+  .ti .chips2 { display: flex; gap: 4px; flex: none; }
+  .tc { font: 600 10px var(--mono); padding: 0 6px; border-radius: 8px; border: 1px solid var(--line); line-height: 16px; }
+  .tc.clear { color: var(--s-idle); border-color: #3c5a41; } .tc.unclear { color: var(--a-warm); border-color: #5c4d2a; }
+  .tc.pending { color: var(--muted); } .tc.err { color: var(--danger); } .tc.gpu { color: #7fd8d0; border-color: #2f5552; }
+  .tdet { margin: 4px 0 6px 21px; padding: 8px 10px; background: var(--card-2); border-radius: 6px; font: 11.5px var(--mono); line-height: 1.5; }
+  .tdet .tt { color: var(--text); font-weight: 600; margin-bottom: 4px; }
+  .tdet .q { color: var(--a-warm); } .tdet pre { white-space: pre-wrap; margin: 6px 0; font: inherit; color: #c9ccd3; }
+  .tdet .fl { color: var(--muted); } .tdet .btns { margin-top: 6px; }
+  .ri { display: flex; gap: 8px; padding: 2px 2px; font: 11.5px var(--mono); color: #c9ccd3; cursor: pointer; }
+  .ri:hover { color: var(--text); } .ri .st { flex: none; width: 14px; }
+  .ri .st.doing { color: var(--s-work); } .ri .sec { color: var(--muted); margin-left: auto; flex: none; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ri .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .more { font: 11px var(--mono); color: var(--accent); cursor: pointer; padding: 2px; }
 
   /* sessions tab */
   #sessions { position: absolute; inset: 0; overflow: auto; padding: 64px 28px 40px; }
@@ -165,7 +204,10 @@
 </style>
 </head>
 <body>
-<nav id="tabs"><button data-tab="arch" class="on">Architecture</button><button data-tab="sessions">Sessions<span class="badge" id="liveCount"></span></button></nav>
+<nav id="tabs"><button data-tab="arch" class="on">Architecture</button><button data-tab="sessions">Sessions<span class="badge" id="liveCount"></span></button><button data-tab="tasks">Tasks<span class="badge" id="taskCount"></span></button></nav>
+<div id="tasks"><div class="thead"><h2>tasks</h2><span id="tmeta"></span>
+  <form id="tadd"><select id="tproj"></select><input id="ttext" placeholder="new task… (Enter adds it; Claude reviews it)" autocomplete="off"></form></div>
+  <div id="tgrid"></div></div>
 <div id="sessions"><div class="shead"><h2>live sessions</h2><span id="smeta"></span><span class="hosts" id="shosts"></span>
   <span class="slegend"><span style="border-color:#7fd8d0"></span>room link<span style="border-color:var(--e-mentions);border-top-style:dashed"></span>related on the repo map (could talk)</span></div>
   <div id="sgrid"></div><div id="sroom"></div><div id="stoast"></div></div>
@@ -210,6 +252,7 @@
 <div id="hint">Scroll to zoom · drag to pan · click a card for details · click a link to edit its label · Del removes the selected repo · Esc clears</div>
 
 <script src="graph.js"></script>
+<script src="tasks/tasks.js" onerror="window.TASKS = null"></script>
 <script>
 const G = window.GRAPH;
 // EMBED: inside cc-menubar's Sessions board, which feeds sessions + room state and handles saves/jumps
@@ -530,6 +573,123 @@ function renderRoom() {
   el.innerHTML = h + '</div>';
 }
 
+// ---------- tasks tab ----------
+const tstate = { open: new Set(), more: new Set() };
+function reloadTasks() {
+  const sc = document.createElement('script');
+  sc.src = 'tasks/tasks.js?' + Date.now();
+  sc.onload = () => { renderTasks(); sc.remove(); };
+  sc.onerror = () => sc.remove();
+  document.head.appendChild(sc);
+}
+window.tasksChanged = reloadTasks;   // cc-menubar calls this after running a tasks command
+async function taskAction(args) {
+  if (EMBED) return BRIDGE.postMessage({ action: 'tasks', args });
+  if (!SERVED) return;
+  try {
+    const r = await (await fetch('/api/tasks', { method: 'POST', body: JSON.stringify({ args }) })).json();
+    if (!r.ok) alert(r.out);
+    else if (args[0] === 'send') alert(r.out);
+  } catch (e) { /* ignore */ }
+  reloadTasks();
+}
+function openFile(path) {
+  if (EMBED) return BRIDGE.postMessage({ action: 'open', path });
+  if (SERVED) fetch('/api/open', { method: 'POST', body: JSON.stringify({ path }) });
+}
+const mdInline = t => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\*(.+?)\*/g, '<i>$1</i>')
+  .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank" style="color:var(--accent)">$1</a>');
+function repoKey(r) { if (!r) return ''; if (repos[r]) return sup(r) === r ? r : sup(r); const top = r.split('/')[0]; return repos[top] ? top : r; }
+
+function renderTasks() {
+  const T = window.TASKS, grid = document.getElementById('tgrid'), meta = document.getElementById('tmeta');
+  if (!T) { grid.innerHTML = '<div class="empty">No task data yet: run <code>python3 tasks/tasks.py collect</code>.</div>'; return; }
+  const R = T.reviews || {};
+  const mine = T.tasks.filter(t => t.state !== 'dropped');
+  const openMine = mine.filter(t => t.state === 'open' || t.state === 'doing');
+  const unclear = openMine.filter(t => R[t.id] && R[t.id].clear === false).length;
+  const pending = openMine.filter(t => !R[t.id]).length;
+  document.getElementById('taskCount').textContent = openMine.length ? ' ' + openMine.length : '';
+  const repoOpen = T.todos.reduce((a, f) => a + f.items.filter(i => i.state === 'open' || i.state === 'doing').length, 0);
+  meta.innerHTML = `${openMine.length} of yours open${unclear ? ` · <span class="warn">${unclear} need an answer</span>` : ''}${pending ? ` · ${pending} being reviewed` : ''} · ${repoOpen} open in ${T.todos.length} repo TODO files`
+    + (SERVED ? '' : ' · <span class="warn">read-only: open via cc-menubar or serve.py to edit</span>');
+  // project cards: your projects first (file order), then repos that only have TODO files
+  const cards = [];
+  const byKey = {};
+  const card = (key, name, repo) => byKey[key] || (byKey[key] = cards[cards.push({ key, name, repo, tasks: [], files: [] }) - 1]);
+  for (const t of mine) card(repoKey(t.repo) || 'p:' + t.project, t.project, repoKey(t.repo)).tasks.push(t);
+  for (const f of T.todos) { const k = repoKey(f.repo); card(k, k, k).files.push(f); }
+  // project picker
+  const sel = document.getElementById('tproj'), cur = sel.value;
+  const projects = [...new Set(T.tasks.map(t => t.project))];
+  sel.innerHTML = projects.map(p => `<option>${esc(p)}</option>`).join('') + '<option value="__new">new project…</option>';
+  if (projects.includes(cur)) sel.value = cur;
+  let h = '';
+  for (const c of cards) {
+    const sess = live.byRepo ? Object.entries(live.byRepo).filter(([r]) => repoKey(r) === c.key).flatMap(([, ss]) => ss) : [];
+    const kindCol = { idle: 'var(--s-idle)', work: 'var(--s-work)', wait: 'var(--s-wait)' };
+    h += `<div class="pcard"><div class="ph"><span class="pn">${esc(c.name)}</span>${c.repo && c.repo !== c.name ? `<span class="pr" data-goto="${esc(c.repo)}">${esc(c.repo)}</span>` : ''}`
+      + `<span class="sq">${sess.map(s => `<i style="background:${kindCol[kindOf(s.status)]}" title="${esc(sessTip(s))}"></i>`).join('')}</span></div>`;
+    if (c.tasks.length) {
+      h += `<div class="sub">yours</div>`;
+      for (const t of c.tasks) {
+        const rv = R[t.id], isOpen = tstate.open.has(t.id), done = t.state === 'done';
+        const chip = done ? '' : !rv ? '<span class="tc pending">reviewing…</span>' : rv.error ? '<span class="tc err" title="' + esc(rv.error) + '">review failed</span>'
+          : `<span class="tc ${rv.clear ? 'clear' : 'unclear'}">${rv.clear ? '✓ clear' : '? unclear'}</span><span class="tc">${esc(rv.size || '')}</span>${rv.needs_gpu ? '<span class="tc gpu">GPU</span>' : ''}`;
+        h += `<div class="ti${done ? ' done' : ''}" data-tid="${t.id}"><span class="cb" data-act="toggle" title="${done ? 'reopen' : 'mark done'}"></span>`
+          + `<span class="tx" data-act="expand">${mdInline(t.text)}</span><span class="chips2">${chip}</span></div>`;
+        if (isOpen && rv && !rv.error) {
+          h += `<div class="tdet"><div class="tt">${esc(rv.title || '')}</div>`
+            + (rv.questions && rv.questions.length ? rv.questions.map(q => `<div class="q">? ${esc(q)}</div>`).join('') : '')
+            + `<pre>${esc(rv.proposal || '')}</pre>`
+            + (rv.files && rv.files.length ? `<div class="fl">files: ${rv.files.map(esc).join(' · ')}</div>` : '')
+            + (rv.needs_gpu ? `<div class="fl">needs a GPU: <code>ssh ${esc(rv.gpu_host || '')}</code></div>` : '')
+            + `<div class="btns"><button class="small" data-act="send" data-tid="${t.id}" ${c.repo ? '' : 'disabled'}>Send to ${esc(c.repo || 'repo')} sessions</button> `
+            + `<button class="small" data-act="rereview" data-tid="${t.id}">Review again</button> <button class="small danger" data-act="drop" data-tid="${t.id}">Drop</button></div></div>`;
+        } else if (isOpen) {
+          h += `<div class="tdet">${rv && rv.error ? 'Review failed: ' + esc(rv.error) : 'Claude is reviewing this task…'}<div class="btns"><button class="small" data-act="rereview" data-tid="${t.id}">Review again</button> <button class="small danger" data-act="drop" data-tid="${t.id}">Drop</button></div></div>`;
+        }
+      }
+    }
+    for (const f of c.files) {
+      const act = f.items.filter(i => i.state === 'doing').concat(f.items.filter(i => i.state === 'open'));
+      const n = s => f.items.filter(i => i.state === s).length;
+      const fkey = f.repo + '/' + f.file, showAll = tstate.more.has(fkey);
+      h += `<div class="sub"><span>${esc((f.repo !== c.key ? f.repo.slice(c.key.length + 1) + '/' : '') + f.file)}</span><span style="text-transform:none;letter-spacing:0;font-weight:400">${n('doing') ? n('doing') + ' doing · ' : ''}${n('open')} open · ${n('done')} done</span>`
+        + (f.format !== 'board' ? `<span class="fmt" title="not in TODO_FORMAT.md's shape">${f.format === 'prose' ? 'prose: no items found' : 'table, not a checkbox board'}</span>` : '') + '</div>';
+      for (const i of (showAll ? act : act.slice(0, 6)))
+        h += `<div class="ri" data-path="${esc(f.path)}" title="${esc(i.text)}\n${esc(f.file)}:${i.line}  (click to open the file)"><span class="st ${i.state}">${i.state === 'doing' ? '◐' : '○'}</span><span class="t">${esc(i.text)}</span><span class="sec">${esc(i.section)}</span></div>`;
+      if (act.length > 6) h += `<div class="more" data-more="${esc(fkey)}">${showAll ? 'show fewer' : `+${act.length - 6} more`}</div>`;
+    }
+    h += '</div>';
+  }
+  grid.innerHTML = h || '<div class="empty">No tasks and no TODO files found.</div>';
+}
+
+document.getElementById('tgrid').addEventListener('click', ev => {
+  const a = ev.target.closest('[data-act],[data-more],[data-path],[data-goto]'); if (!a) return;
+  if (a.dataset.goto) { setTab('arch'); select(a.dataset.goto); return; }
+  if (a.dataset.more) { tstate.more.has(a.dataset.more) ? tstate.more.delete(a.dataset.more) : tstate.more.add(a.dataset.more); return renderTasks(); }
+  if (a.dataset.path) return openFile(a.dataset.path);
+  const id = a.dataset.tid || a.closest('[data-tid]')?.dataset.tid, t = window.TASKS.tasks.find(x => x.id === id);
+  const act = a.dataset.act;
+  if (act === 'expand') { tstate.open.has(id) ? tstate.open.delete(id) : tstate.open.add(id); return renderTasks(); }
+  if (!SERVED) return;
+  if (act === 'toggle') { t.state = t.state === 'done' ? 'open' : 'done'; renderTasks(); taskAction(['set', id, t.state]); }
+  if (act === 'drop' && confirm('Drop this task? (it stays in tasks.md as [-])')) { t.state = 'dropped'; renderTasks(); taskAction(['set', id, 'dropped']); }
+  if (act === 'rereview') { delete window.TASKS.reviews[id]; renderTasks(); taskAction(['review', id]); }
+  if (act === 'send' && confirm('Send this task and its proposal to the live sessions of this repo?')) taskAction(['send', id]);
+});
+document.getElementById('tadd').addEventListener('submit', ev => {
+  ev.preventDefault();
+  if (!SERVED) return alert('Adding needs cc-menubar\'s board or serve.py.');
+  const inp = document.getElementById('ttext'), text = inp.value.trim(); if (!text) return;
+  let proj = document.getElementById('tproj').value;
+  if (proj === '__new') { proj = (prompt('Project name (a repo name links it to that repo):') || '').trim(); if (!proj) return; }
+  inp.value = '';
+  taskAction(['add', proj, text]);
+});
+
 function render() {
   computeGeometry(); route();
   let h = '';
@@ -808,9 +968,11 @@ addEventListener('resize', fit);
 
 function setTab(t) {
   document.body.classList.toggle('tab-sessions', t === 'sessions');
+  document.body.classList.toggle('tab-tasks', t === 'tasks');
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   if (t === 'sessions') renderSessions();
-  history.replaceState(null, '', t === 'sessions' ? '#sessions' : '#');
+  if (t === 'tasks') { renderTasks(); taskAction(['collect']); }
+  history.replaceState(null, '', t === 'arch' ? '#' : '#' + t);
 }
 document.getElementById('tabs').addEventListener('click', ev => { const t = ev.target.closest('button')?.dataset.tab; if (t) setTab(t); });
 const sgrid = document.getElementById('sgrid');
@@ -843,6 +1005,9 @@ addEventListener('resize', () => { if (document.body.classList.contains('tab-ses
 render();
 fit();
 if (location.hash === '#sessions') setTab('sessions');
+if (location.hash === '#tasks') setTab('tasks');
+renderTasks();
+setInterval(() => { if (document.body.classList.contains('tab-tasks')) reloadTasks(); }, 8000);
 pollSessions();
 if (SERVED) setInterval(pollSessions, 5000);
 if (!SERVED && (local.config || local.layout)) status('Showing edits saved in this browser. Run serve.py to write them to disk.', true);

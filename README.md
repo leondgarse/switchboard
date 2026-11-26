@@ -34,6 +34,24 @@ You can also open `index.html` directly. Without the server, edits are kept in t
 
 Session data comes from [cc-menubar](../cc-menubar), which already polls every host over SSH. On each poll it writes `~/.cache/cc-menubar/sessions.json`. If that file is more than 15 s old (the menu bar app isn't running), `serve.py` refreshes it with `cc-menubar.py --snapshot`. A session belongs to the repo whose name appears as a folder in its working directory, so paths on remote hosts match too.
 
+## Tasks tab
+
+`tasks/` puts your own task list next to every repo's `TODO.md`, one card per project.
+
+- **Your tasks** live in `tasks/tasks.md` (first imported from Todolist's CSV export: `tasks.py import-todoist <csv>`).
+  Add, tick and drop them in the tab. Project headings link to repos (`## OCR · repo: ocr-bench`).
+- **Claude reviews each task you add:** is it clear (with up to 2 questions), a one-line restatement, a 3–5 line
+  proposal, the files involved, size S/M/L, and whether it needs a GPU (then it names the RTX host). This runs
+  `claude -p` locally in the repo with read-only tools and the room hooks off, about 15 s and $0.10–0.15 a task.
+  Results go to `tasks/reviews.json`. **Send to sessions** posts a task and its proposal to that repo's live
+  sessions through the room.
+- **Repo TODO files** (anything named `TODO.md` that git tracks) are only read, never written: their open and
+  in-progress items, counts, and a flag on files that aren't in the shared format. Click an item to open the file.
+- **The shared format** is `tasks/TODO_FORMAT.md`. To have sessions keep a repo's board in it, add one line to that repo's
+  `CLAUDE.md`: `Keep TODO.md in the format of ~/workspace/switchboard/tasks/TODO_FORMAT.md.`
+
+    python3 tasks/tasks.py add|set|review|send|collect …   (the tab drives these too)
+
 ## Room: sessions messaging each other across hosts
 
 `room/` has a small mailbox for Claude Code sessions. One server (`room/server.py`, HTTP + SQLite, stdlib only) runs on the

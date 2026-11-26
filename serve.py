@@ -18,7 +18,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
-PUBLIC = {"/": "index.html", "/index.html": "index.html", "/graph.js": "graph.js"}
+PUBLIC = {"/": "index.html", "/index.html": "index.html", "/graph.js": "graph.js", "/tasks/tasks.js": "tasks/tasks.js"}
+TASK_CMDS = {"add", "set", "review", "collect", "send"}
 SNAPSHOT = Path.home() / ".cache" / "cc-menubar" / "sessions.json"
 STALE_AFTER = 15          # seconds; the menu bar app rewrites the snapshot every poll (~5 s)
 _refreshing = threading.Lock()
@@ -87,6 +88,28 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
+        if self.path in ("/api/tasks", "/api/open"):
+            try:
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+            except Exception:
+                return self.send_error(400)
+            if self.path == "/api/open":   # open a TODO file in its default app
+                path = os.path.realpath(str(body.get("path", "")))
+                if not path.startswith(str(Path.home()) + "/") or not os.path.isfile(path):
+                    return self.send_error(403)
+                subprocess.Popen(["open", path])
+                self.send_response(204)
+                return self.end_headers()
+            args = [str(x) for x in body.get("args", [])]
+            if not args or args[0] not in TASK_CMDS:
+                return self.send_error(400, "unknown tasks command")
+            r = subprocess.run([sys.executable, str(HERE / "tasks" / "tasks.py")] + args, capture_output=True, text=True, timeout=120)
+            out = json.dumps({"ok": r.returncode == 0, "out": (r.stdout + r.stderr).strip()[-500:]}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(out)))
+            self.end_headers()
+            return self.wfile.write(out)
         if self.path == "/api/relayout":
             r = subprocess.run([sys.executable, str(HERE / "scan.py"), "--render-only", "--relayout"], check=False)
             self.send_response(204 if r.returncode == 0 else 500)
