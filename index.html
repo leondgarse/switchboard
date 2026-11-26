@@ -151,6 +151,9 @@
   .tdet .q { color: var(--a-warm); } .tdet pre { white-space: pre-wrap; margin: 6px 0; font: inherit; color: #c9ccd3; }
   .tdet .fl { color: var(--muted); } .tdet .btns { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .tdet .btns input[type=date], .tdet .btns select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 4px; font: 11px var(--mono); padding: 1px 4px; }
+  #ttoast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line);
+    border-radius: 6px; padding: 7px 12px; font: 12px var(--mono); display: none; gap: 12px; align-items: center; z-index: 9; }
+  #ttoast button { background: none; border: 1px solid var(--accent); color: var(--accent); border-radius: 4px; font: 600 11px var(--mono); padding: 1px 8px; cursor: pointer; }
   #tview { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 2px; }
   #tview button { background: none; border: 0; color: var(--muted); font: 600 11px var(--mono); padding: 3px 10px; border-radius: 4px; cursor: pointer; }
   #tview button.on { background: var(--card); color: var(--text); }
@@ -234,7 +237,7 @@
 <nav id="tabs"><button data-tab="arch" class="on">Architecture</button><button data-tab="sessions">Sessions<span class="badge" id="liveCount"></span></button><button data-tab="tasks">Tasks<span class="badge" id="taskCount"></span></button></nav>
 <div id="tasks"><div class="thead"><h2>tasks</h2><span id="tview"><button data-v="yours">Yours</button><button data-v="boards">Repo boards</button></span><span id="tmeta"></span>
   <form id="tadd"><select id="tproj"></select><input id="ttext" placeholder="new task… (Enter adds; Claude reviews it. Start with “! ” = high priority, “- ” = no review)" autocomplete="off"></form></div>
-  <div id="tgrid"></div></div>
+  <div id="tgrid"></div><div id="ttoast"></div></div>
 <div id="sessions"><div class="shead"><h2>live sessions</h2><span id="smeta"></span><span class="hosts" id="shosts"></span>
   <span class="slegend"><span style="border-color:#7fd8d0"></span>room link<span style="border-color:var(--e-mentions);border-top-style:dashed"></span>related on the repo map (could talk)</span></div>
   <div id="sgrid"></div><div id="sroom"></div><div id="stoast"></div></div>
@@ -746,7 +749,7 @@ function renderYours(T, R, grid) {
   const up = active.slice().sort(cmpTasks).slice(0, 3);
   let h = `<div class="ysum"><div><h3>next up</h3>${up.map((t, i) => `<div class="nx" data-jump="${t.id}"><b>${i + 1}</b>${t.pri === 'high' ? '★ ' : ''}${mdInline(t.text)}<span class="pj">· ${esc(t.project)}${t.due ? ' · ' + dueLabel(t.due) : ''}</span></div>`).join('') || '<div class="nx">nothing open</div>'}</div>`
     + `<div class="cnt"><b>${active.length}</b> open${active.some(t => t.state === 'doing') ? ` · <b>${all.filter(t => t.state === 'doing').length}</b> doing` : ''}<br>`
-    + `${high ? `<b>${high}</b> ★ high · ` : ''}${late ? `<b style="color:var(--danger)">${late}</b> late · ` : ''}${soon ? `<b>${soon}</b> due this week · ` : ''}<b>${doneWeek}</b> done this week<br>`
+    + `${high ? `<b>${high}</b> ★ high · ` : ''}${late ? `<b style="color:var(--danger)">${late}</b> late · ` : ''}${soon ? `<b>${soon}</b> due this week · ` : ''}<span data-showclosed="1" style="cursor:pointer;text-decoration:underline dotted" title="show closed tasks"><b>${doneWeek}</b> done this week</span><br>`
     + `${active.filter(t => !R[t.id] && t.review !== 'skip').length ? active.filter(t => !R[t.id] && t.review !== 'skip').length + ' being reviewed' : ''}</div></div>`;
   const counts = {}; for (const t of active) counts[t.project] = (counts[t.project] || 0) + 1;
   h += `<div class="yfil"><span class="pf${pf ? '' : ' on'}" data-pf="">all<span class="n">${active.length}</span></span>`
@@ -769,8 +772,9 @@ function renderYours(T, R, grid) {
 }
 
 document.getElementById('tgrid').addEventListener('click', ev => {
-  const a = ev.target.closest('[data-act],[data-more],[data-path],[data-goto],[data-pf],[data-jump]'); if (!a) return;
+  const a = ev.target.closest('[data-act],[data-more],[data-path],[data-goto],[data-pf],[data-jump],[data-showclosed]'); if (!a) return;
   if (a.dataset.goto) { setTab('arch'); select(a.dataset.goto); return; }
+  if (a.dataset.showclosed) { tstate.closed = !tstate.closed; return renderTasks(); }
   if (a.dataset.pf !== undefined) { tstate.project = tstate.project === a.dataset.pf ? '' : a.dataset.pf; return renderTasks(); }
   if (a.dataset.jump) { tstate.open.add(a.dataset.jump); renderTasks(); document.querySelector(`.ti[data-tid="${a.dataset.jump}"]`)?.scrollIntoView({ block: 'center' }); return; }
   if (a.dataset.more) { tstate.more.has(a.dataset.more) ? tstate.more.delete(a.dataset.more) : tstate.more.add(a.dataset.more); return renderTasks(); }
@@ -781,7 +785,10 @@ document.getElementById('tgrid').addEventListener('click', ev => {
   if (act === 'expand') { tstate.open.has(id) ? tstate.open.delete(id) : tstate.open.add(id); return renderTasks(); }
   if (act === 'due' || act === 'move') return;   // handled on change
   if (!SERVED) return;
-  const set = (state) => { t.state = state; renderTasks(); taskAction(['set', id, state]); };
+  const set = (state) => {
+    const before = t.state; t.state = state; renderTasks(); taskAction(['set', id, state]);
+    if (state === 'done' || state === 'dropped') undoToast(`${state === 'done' ? 'Done' : 'Dropped'}: ${t.text.slice(0, 50)}`, () => { t.state = before; renderTasks(); taskAction(['set', id, before]); });
+  };
   if (act === 'toggle') set(t.state === 'done' || t.state === 'dropped' ? 'open' : 'done');
   if (act === 'start') set('doing');
   if (act === 'pause') set('open');
@@ -792,6 +799,13 @@ document.getElementById('tgrid').addEventListener('click', ev => {
   if (act === 'rereview') { delete window.TASKS.reviews[id]; renderTasks(); taskAction(['review', id]); }
   if (act === 'send' && confirm('Send this task and its proposal to the live sessions of this repo?')) taskAction(['send', id]);
 });
+let toastTimer;
+function undoToast(msg, undo) {
+  const el = document.getElementById('ttoast');
+  el.innerHTML = `<span>${esc(msg)}</span><button>Undo</button>`; el.style.display = 'flex';
+  el.querySelector('button').onclick = () => { el.style.display = 'none'; undo(); };
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.style.display = 'none', 8000);
+}
 document.getElementById('tgrid').addEventListener('change', ev => {
   const a = ev.target;
   if (a.id === 'tclosed') { tstate.closed = a.checked; return renderTasks(); }
