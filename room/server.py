@@ -69,8 +69,11 @@ class Room:
         return out
 
     def resolve_session(self, who):
-        """Session id, unique id prefix, or session name (most recently seen wins)."""
+        """Session id, unique id prefix, session name, or name@host as `room who` prints it (most recently seen wins)."""
+        name, _, host = who.rpartition("@")
         r = self.q("SELECT id FROM sessions WHERE id=?", who) or \
+            (self.q("SELECT id FROM sessions WHERE name=? AND lower(host)=lower(?) ORDER BY last_seen DESC LIMIT 1",
+                    name, host) if name else []) or \
             self.q("SELECT id FROM sessions WHERE name=? ORDER BY last_seen DESC LIMIT 1", who) or \
             (self.q("SELECT id FROM sessions WHERE id LIKE ?", who + "%") if len(who) >= 6 else [])
         return r[0]["id"] if len(r) == 1 else None

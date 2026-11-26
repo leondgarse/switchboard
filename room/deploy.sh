@@ -17,10 +17,10 @@ while read -r name dest; do
   else
     ssh -o BatchMode=yes "$dest" 'mkdir -p ~/.local/share/switchboard' </dev/null
     scp -q room.py "$dest":.local/share/switchboard/ </dev/null
-    [ "$name" = "$SERVER_HOST" ] && scp -q server.py "$dest":.local/share/switchboard/ </dev/null
+    [ "$name" = "$SERVER_HOST" ] && scp -q server.py ensure-server.sh "$dest":.local/share/switchboard/ </dev/null
     ssh -o BatchMode=yes "$dest" "$inst" </dev/null
     if [ "$name" = "$SERVER_HOST" ] && [ "$1" = "--restart" ]; then
-      ssh "$dest" 'pkill -f switchboard/server.py; sleep 1; ~/.local/share/switchboard/ensure-server.sh' </dev/null
+      ssh "$dest" 'pkill -f "share/switchboard/server.py"; sleep 1; ~/.local/share/switchboard/ensure-server.sh' </dev/null
     fi
   fi
   echo "deployed: $name"

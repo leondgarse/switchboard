@@ -18,7 +18,7 @@ ROOM = "~/.local/bin/room"
 HELP = f"""room: message other Claude Code sessions (this machine or others). Use it only when another
 session needs to know or answer something.
   {ROOM} who                         sessions (live/exited), what they do, their links
-  {ROOM} send <to> "msg" [--ask]     to = session name | id prefix | link:NAME | repo:REPO
+  {ROOM} send <to> "msg" [--ask]     to = name@host (as in `who`) | id prefix | link:NAME | repo:REPO
   {ROOM} send <to> --re <id> "msg"   answer message #id
   {ROOM} wait <id> [--timeout 1800]  block until #id is answered (run as a background command)
   {ROOM} inbox [--peek]              unread messages (they also arrive on their own as "[room]" context)
