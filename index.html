@@ -212,7 +212,10 @@
 <script src="graph.js"></script>
 <script>
 const G = window.GRAPH;
-const SERVED = location.protocol.startsWith('http');
+// EMBED: inside cc-menubar's Sessions board, which feeds sessions + room state and handles saves/jumps
+const BRIDGE = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.ccmenubar;
+const EMBED = !!BRIDGE;
+const SERVED = location.protocol.startsWith('http') || EMBED;
 const LS_KEY = 'repo-arch:' + G.root;
 const local = SERVED ? {} : JSON.parse(localStorage.getItem(LS_KEY) || '{}');
 const config = { ...window.CONFIG, ...(local.config || {}) };
@@ -394,8 +397,18 @@ function sessionDots(ss, xEnd, cy) {
 }
 async function pollSessions() {
   if (!SERVED) return renderSessions();
+  if (EMBED) return;   // cc-menubar pushes data through window.ccFeed
   try {
     const [snap, room] = await Promise.all([fetch('/api/sessions').then(r => r.json()), fetch('/api/room').then(r => r.json()).catch(() => null)]);
+    applyLive(snap, room);
+  } catch (e) { /* server restarting; try again next tick */ }
+}
+window.ccFeed = (snap, room) => {
+  snap.age = Math.max(0, Date.now() / 1000 - snap.generated); snap.collector = true;
+  applyLive(snap, room);
+};
+function applyLive(snap, room) {
+  {
     live.room = room && room.ok ? room : null;
     const byRepo = {};
     for (const s of snap.sessions) { s.repo = repoOf(s.cwd); if (s.repo) (byRepo[s.repo] ||= []).push(s); }
@@ -408,7 +421,7 @@ async function pollSessions() {
     document.getElementById('liveCount').textContent = (n ? ' ' + n : '') + (mail ? ' ✉' + mail : '');
     if (sig !== live.sig) { live.sig = sig; render(); }
     renderSessions();
-  } catch (e) { /* server restarting; try again next tick */ }
+  }
 }
 
 function resumeCmd(s) {
@@ -474,7 +487,8 @@ function renderSessions() {
     for (const host of hosts) {
       h += `<div class="hcol" data-row="${esc(k)}">` + rows[k].filter(s => s.host === host).map((s, i) => {
         const cmd = resumeCmd(s);
-        return `<div class="chip-s ${kindOf(s.status)}" ${cmd ? `data-copy="${esc(cmd)}"` : ''} title="${esc(sessTip(s) + (cmd ? '\n\nclick to copy: ' + cmd : ''))}">
+        const hint = EMBED ? '\n\nclick to jump to its terminal (or copy a resume command)' : (cmd ? '\n\nclick to copy: ' + cmd : '');
+        return `<div class="chip-s ${kindOf(s.status)}" data-host="${esc(s.host)}" data-sid="${esc(s.sessionId)}" ${cmd ? `data-copy="${esc(cmd)}"` : ''} title="${esc(sessTip(s) + hint)}" style="cursor:${EMBED ? 'pointer' : 'copy'}">
           <div class="top"><span class="d"></span>${esc(truncate(s.name, 26))}${room && room.unread[s.sessionId] ? `<span class="mail" title="unread room messages">✉${room.unread[s.sessionId]}</span>` : ''}${s.tool !== 'cc' ? ` <span class="tool">${esc(s.tool.toUpperCase())}</span>` : ''}<span class="age">${esc(s.status)} ${sinceTxt(s.statusSince)}</span></div>
           <div class="tl">${esc(s.title || '—')}</div>${roomSess[s.sessionId]?.status ? `<div class="st">▸ ${esc(roomSess[s.sessionId].status)}</div>` : ''}</div>`;
       }).join('') + '</div>';
@@ -642,6 +656,7 @@ let statusTimer;
 function status(msg, warn) { const el = document.getElementById('status'); el.textContent = msg; el.className = warn ? 'warn' : '';
   clearTimeout(statusTimer); if (!warn) statusTimer = setTimeout(() => el.textContent = '', 2500); }
 async function save(kind, patch) {
+  if (EMBED) { BRIDGE.postMessage({ action: 'save', kind, patch }); return status(`Saved to ${kind}.json`); }
   if (SERVED) {
     try {
       const r = await fetch('/api/' + kind, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
@@ -785,6 +800,7 @@ document.getElementById('fitBtn').onclick = fit;
 document.getElementById('tidy').onclick = async () => {
   if (!SERVED) return status('Tidy needs the local server: python3 serve.py (or run scan.py --relayout).', true);
   if (!confirm('Recompute the whole layout? Cards you moved by hand will be repositioned.')) return;
+  if (EMBED) { BRIDGE.postMessage({ action: 'relayout' }); return status('Recomputing layout…'); }
   const r = await fetch('/api/relayout', { method: 'POST' });
   r.ok ? location.reload() : status('Tidy failed (' + r.status + ')', true);
 };
@@ -811,8 +827,14 @@ sgrid.addEventListener('mouseleave', () => { sgrid.classList.remove('hl'); docum
 sgrid.addEventListener('click', async ev => {
   const go = ev.target.closest('[data-goto]')?.dataset.goto;
   if (go) { setTab('arch'); select(go); const g = geo[go]; if (g) { view.x = innerWidth / 2 - (g.x + g.w / 2) * view.k; view.y = innerHeight / 2 - (g.y + g.h / 2) * view.k; applyView(); } return; }
-  const cmd = ev.target.closest('[data-copy]')?.dataset.copy; if (!cmd) return;
   const t = document.getElementById('stoast');
+  const chip = ev.target.closest('.chip-s');
+  if (EMBED && chip) {
+    BRIDGE.postMessage({ action: 'activate', host: chip.dataset.host, sessionId: chip.dataset.sid });
+    t.textContent = 'Switching to ' + chip.dataset.host + ' …'; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 2000);
+    return;
+  }
+  const cmd = ev.target.closest('[data-copy]')?.dataset.copy; if (!cmd) return;
   try { await navigator.clipboard.writeText(cmd); t.textContent = 'Copied: ' + cmd; } catch (e) { t.textContent = cmd; }
   t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 3000);
 });

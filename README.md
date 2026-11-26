@@ -10,6 +10,10 @@ A map of the git repos under `~/workspace`, plus the Claude Code sessions runnin
     python3 scan.py        # scan ~/workspace (about a minute); existing card positions never move
     python3 serve.py       # http://127.0.0.1:8765  (saves edits, serves live sessions)
 
+**Sessions board in cc-menubar (macOS):** choose **Sessions board…** (⌘B) in the cc-menubar dropdown, or open
+CCMenubar.app again. The page opens in a native window. cc-menubar pushes sessions and room state on every poll, so
+no `serve.py` is needed. Clicking a session jumps to its tmux pane, and edits are saved through the app.
+
 You can also open `index.html` directly. Without the server, edits are kept in the browser only and there are no live sessions.
 
 | Command | What it does |

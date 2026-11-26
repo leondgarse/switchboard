@@ -8,7 +8,11 @@ Edges:
   stack      - repos share notable dependencies (weighted by count)
 Tags (Obsidian #tags, hub nodes in the HTML): org/<owner>, lang/<language>.
 """
-import argparse, json, os, re, subprocess, sys, tomllib
+import argparse, json, os, re, subprocess, sys
+try:
+    import tomllib   # 3.11+; only needed to read pyproject/Cargo files during a full scan
+except ImportError:
+    tomllib = None
 from collections import Counter, defaultdict
 from pathlib import Path
 
