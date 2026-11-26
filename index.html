@@ -127,7 +127,11 @@
   #tadd select, #tadd input { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font: 12px var(--mono); }
   #tadd input { width: 360px; } #tadd input:focus, #tadd select:focus { outline: 1px solid var(--accent); }
   #tgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 14px; align-items: start; }
-  #tgrid.yours { display: block; max-width: 980px; }
+  #tgrid.yours { display: block; max-width: 1360px; }
+  .ycols { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; align-items: start; }
+  .ycols .yside .ysec { position: sticky; top: 0; max-height: calc(100vh - 90px); overflow: auto; }
+  .ycols .yside .ti .tx { color: var(--muted); }
+  @media (max-width: 1000px) { .ycols { grid-template-columns: 1fr; } }
   .pcard { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; position: relative; }
   .pcard .ph { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
   .pcard .ph .pn { font: 600 13px var(--mono); } .pcard .ph .pr { font: 11px var(--mono); color: var(--muted); cursor: pointer; }
@@ -749,12 +753,12 @@ function renderYours(T, R, grid) {
   const up = active.slice().sort(cmpTasks).slice(0, 3);
   let h = `<div class="ysum"><div><h3>next up</h3>${up.map((t, i) => `<div class="nx" data-jump="${t.id}"><b>${i + 1}</b>${t.pri === 'high' ? '★ ' : ''}${mdInline(t.text)}<span class="pj">· ${esc(t.project)}${t.due ? ' · ' + dueLabel(t.due) : ''}</span></div>`).join('') || '<div class="nx">nothing open</div>'}</div>`
     + `<div class="cnt"><b>${active.length}</b> open${active.some(t => t.state === 'doing') ? ` · <b>${all.filter(t => t.state === 'doing').length}</b> doing` : ''}<br>`
-    + `${high ? `<b>${high}</b> ★ high · ` : ''}${late ? `<b style="color:var(--danger)">${late}</b> late · ` : ''}${soon ? `<b>${soon}</b> due this week · ` : ''}<span data-showclosed="1" style="cursor:pointer;text-decoration:underline dotted" title="show closed tasks"><b>${doneWeek}</b> done this week</span><br>`
+    + `${high ? `<b>${high}</b> ★ high · ` : ''}${late ? `<b style="color:var(--danger)">${late}</b> late · ` : ''}${soon ? `<b>${soon}</b> due this week · ` : ''}<b>${doneWeek}</b> done this week<br>`
     + `${active.filter(t => !R[t.id] && t.review !== 'skip').length ? active.filter(t => !R[t.id] && t.review !== 'skip').length + ' being reviewed' : ''}</div></div>`;
   const counts = {}; for (const t of active) counts[t.project] = (counts[t.project] || 0) + 1;
   h += `<div class="yfil"><span class="pf${pf ? '' : ' on'}" data-pf="">all<span class="n">${active.length}</span></span>`
     + Object.entries(counts).map(([p, n]) => `<span class="pf${pf === p ? ' on' : ''}" data-pf="${esc(p)}">${esc(p)}<span class="n">${n}</span></span>`).join('')
-    + `<input type="search" id="tq" placeholder="search…" value="${esc(tstate.q || '')}"><label><input type="checkbox" id="tclosed"${tstate.closed ? ' checked' : ''}>closed</label></div>`;
+    + `<input type="search" id="tq" placeholder="search…" value="${esc(tstate.q || '')}"></div>`;
   // within a section, one group per project (in tasks.md order), each with its own heading
   const order = [...new Set(all.map(t => t.project))];
   const groups = list => order.map(p => [p, list.filter(t => t.project === p)]).filter(([, l]) => l.length);
@@ -763,18 +767,21 @@ function renderYours(T, R, grid) {
       + `${repoKey(l[0].repo) && repoKey(l[0].repo) !== p ? `<span class="pgr">${esc(repoKey(l[0].repo))}</span>` : ''}<span class="pgn">${l.length}</span></div>`
       + l.map(t => taskRow(t, R)).join('') + '</div>').join('')
       || `<div class="fl" style="font:11.5px var(--mono);color:var(--muted)">${empty}</div>`) + '</div>';
+  h += '<div class="ycols"><div class="ymain">';
   if (doing.length) h += sec('in progress', doing, '');
   h += sec('next', next, q || pf ? 'nothing matches' : 'nothing open: add one above');
-  if (tstate.closed) h += sec('closed', closed, 'none');
+  // closed: a flat list on the right, newest first; click a checkbox to reopen
+  h += `</div><div class="yside"><div class="ysec"><div class="sub">closed · ${closed.length}</div>`
+    + (closed.map(t => taskRow(t, R, { project: !pf })).join('') || '<div class="fl" style="font:11.5px var(--mono);color:var(--muted)">nothing closed yet</div>')
+    + '</div></div></div>';
   const focus = document.activeElement && document.activeElement.id === 'tq', caret = focus ? document.activeElement.selectionStart : 0;
   grid.innerHTML = h;
   if (focus) { const i = document.getElementById('tq'); i.focus(); i.setSelectionRange(caret, caret); }
 }
 
 document.getElementById('tgrid').addEventListener('click', ev => {
-  const a = ev.target.closest('[data-act],[data-more],[data-path],[data-goto],[data-pf],[data-jump],[data-showclosed]'); if (!a) return;
+  const a = ev.target.closest('[data-act],[data-more],[data-path],[data-goto],[data-pf],[data-jump]'); if (!a) return;
   if (a.dataset.goto) { setTab('arch'); select(a.dataset.goto); return; }
-  if (a.dataset.showclosed) { tstate.closed = !tstate.closed; return renderTasks(); }
   if (a.dataset.pf !== undefined) { tstate.project = tstate.project === a.dataset.pf ? '' : a.dataset.pf; return renderTasks(); }
   if (a.dataset.jump) { tstate.open.add(a.dataset.jump); renderTasks(); document.querySelector(`.ti[data-tid="${a.dataset.jump}"]`)?.scrollIntoView({ block: 'center' }); return; }
   if (a.dataset.more) { tstate.more.has(a.dataset.more) ? tstate.more.delete(a.dataset.more) : tstate.more.add(a.dataset.more); return renderTasks(); }
@@ -808,7 +815,6 @@ function undoToast(msg, undo) {
 }
 document.getElementById('tgrid').addEventListener('change', ev => {
   const a = ev.target;
-  if (a.id === 'tclosed') { tstate.closed = a.checked; return renderTasks(); }
   const id = a.closest('.tdet')?.previousElementSibling?.dataset.tid, t = window.TASKS.tasks.find(x => x.id === id);
   if (!t || !SERVED) return;
   if (a.dataset.act === 'due') { t.due = a.value; renderTasks(); taskAction(['edit', id, 'due=' + a.value]); }
