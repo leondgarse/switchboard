@@ -40,7 +40,8 @@ Session data comes from [cc-menubar](../cc-menubar), which already polls every h
 
 - **Two views.** **Yours** is one list of every task you wrote, across projects: a "next up" top 3, counts
   (open, doing, ★ high, late, due this week, done this week), project filters and search, then In progress and Next, with
-  Closed in a column on the right (click a checkbox there to reopen). Ordering is doing first, then ★, then due date, then oldest. **Repo boards** is one card per project, with your
+  Closed in a column on the right (the **closed** box hides it), grouped by week: this week and last week open,
+  older weeks collapsed. Click a checkbox there to reopen a task. Ordering is doing first, then ★, then due date, then oldest. **Repo boards** is one card per project, with your
   tasks next to that repo's TODO files and live sessions.
 - **Your tasks** live in `tasks/tasks.md` (first imported from Todolist's CSV export: `tasks.py import-todoist <csv>`).
   In the tab: add (start with `! ` for high priority, `- ` to skip Claude's review, or both: `! - …`), tick, ☆ star, and click a task for Start/Pause, a due date, moving

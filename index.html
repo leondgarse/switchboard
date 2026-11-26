@@ -131,6 +131,9 @@
   .ycols { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; align-items: start; }
   .ycols .yside .ysec { position: sticky; top: 0; max-height: calc(100vh - 90px); overflow: auto; }
   .ycols .yside .ti .tx { color: var(--muted); }
+  .ycols .yside .ti .pj { max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ycols.one { grid-template-columns: 1fr; } .ycols.one .ymain { max-width: 980px; }
+  .ysec .pgh.wk { cursor: pointer; font-weight: 400; color: var(--muted); } .ysec .pgh.wk:hover { color: var(--text); }
   @media (max-width: 1000px) { .ycols { grid-template-columns: 1fr; } }
   .pcard { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; position: relative; }
   .pcard .ph { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
@@ -608,7 +611,7 @@ function renderRoom() {
 }
 
 // ---------- tasks tab ----------
-const tstate = { open: new Set(), more: new Set(), view: localStorage.getItem('sb-tview') || 'yours', project: '', q: '', closed: false };
+const tstate = { open: new Set(), more: new Set(), view: localStorage.getItem('sb-tview') || 'yours', project: '', q: '', closed: localStorage.getItem('sb-tclosed') !== '0' };
 function reloadTasks() {
   const sc = document.createElement('script');
   sc.src = 'tasks/tasks.js?' + Date.now();
@@ -758,7 +761,7 @@ function renderYours(T, R, grid) {
   const counts = {}; for (const t of active) counts[t.project] = (counts[t.project] || 0) + 1;
   h += `<div class="yfil"><span class="pf${pf ? '' : ' on'}" data-pf="">all<span class="n">${active.length}</span></span>`
     + Object.entries(counts).map(([p, n]) => `<span class="pf${pf === p ? ' on' : ''}" data-pf="${esc(p)}">${esc(p)}<span class="n">${n}</span></span>`).join('')
-    + `<input type="search" id="tq" placeholder="search…" value="${esc(tstate.q || '')}"></div>`;
+    + `<input type="search" id="tq" placeholder="search…" value="${esc(tstate.q || '')}"><label><input type="checkbox" id="tclosed"${tstate.closed ? ' checked' : ''}>closed</label></div>`;
   // within a section, one group per project (in tasks.md order), each with its own heading
   const order = [...new Set(all.map(t => t.project))];
   const groups = list => order.map(p => [p, list.filter(t => t.project === p)]).filter(([, l]) => l.length);
@@ -767,13 +770,32 @@ function renderYours(T, R, grid) {
       + `${repoKey(l[0].repo) && repoKey(l[0].repo) !== p ? `<span class="pgr">${esc(repoKey(l[0].repo))}</span>` : ''}<span class="pgn">${l.length}</span></div>`
       + l.map(t => taskRow(t, R)).join('') + '</div>').join('')
       || `<div class="fl" style="font:11.5px var(--mono);color:var(--muted)">${empty}</div>`) + '</div>';
-  h += '<div class="ycols"><div class="ymain">';
+  h += `<div class="ycols${tstate.closed ? '' : ' one'}"><div class="ymain">`;
   if (doing.length) h += sec('in progress', doing, '');
   h += sec('next', next, q || pf ? 'nothing matches' : 'nothing open: add one above');
-  // closed: a flat list on the right, newest first; click a checkbox to reopen
-  h += `</div><div class="yside"><div class="ysec"><div class="sub">closed · ${closed.length}</div>`
-    + (closed.map(t => taskRow(t, R, { project: !pf })).join('') || '<div class="fl" style="font:11.5px var(--mono);color:var(--muted)">nothing closed yet</div>')
-    + '</div></div></div>';
+  // closed: on the right, grouped by the week it was closed (weeks start Monday); older than last week starts collapsed
+  h += '</div>';
+  if (tstate.closed) {
+    const monday = d => { const x = new Date(d + 'T12:00'); x.setDate(x.getDate() - (x.getDay() + 6) % 7); return x.toLocaleDateString('sv'); };
+    const thisWk = monday(todayKey()), lastWk = monday(new Date(Date.now() - 7 * 864e5).toLocaleDateString('sv'));
+    const weeks = [];
+    for (const t of closed) {
+      const wk = t.done ? monday(t.done) : '';
+      let g = weeks.find(w => w.wk === wk); if (!g) weeks.push(g = { wk, list: [] }); g.list.push(t);
+    }
+    weeks.sort((a, b) => b.wk.localeCompare(a.wk));
+    h += `<div class="yside"><div class="ysec"><div class="sub">closed · ${closed.length}</div>`;
+    for (const w of weeks) {
+      const name = w.wk === thisWk ? 'this week' : w.wk === lastWk ? 'last week' : w.wk ? 'week of ' + w.wk.slice(5) : 'no date';
+      const recent = w.wk === thisWk || w.wk === lastWk, key = 'wk:' + w.wk;
+      const open = recent ? !tstate.more.has(key) : tstate.more.has(key);   // tstate.more flips the default
+      h += `<div class="pg"><div class="pgh wk" data-more="${key}"><span>${open ? '▾' : '▸'} ${name}</span><span class="pgn">${w.list.length}</span></div>`
+        + (open ? w.list.map(t => taskRow(t, R, { project: !pf })).join('') : '') + '</div>';
+    }
+    if (!weeks.length) h += '<div class="fl" style="font:11.5px var(--mono);color:var(--muted)">nothing closed yet</div>';
+    h += '</div></div>';
+  }
+  h += '</div>';
   const focus = document.activeElement && document.activeElement.id === 'tq', caret = focus ? document.activeElement.selectionStart : 0;
   grid.innerHTML = h;
   if (focus) { const i = document.getElementById('tq'); i.focus(); i.setSelectionRange(caret, caret); }
@@ -815,6 +837,7 @@ function undoToast(msg, undo) {
 }
 document.getElementById('tgrid').addEventListener('change', ev => {
   const a = ev.target;
+  if (a.id === 'tclosed') { tstate.closed = a.checked; localStorage.setItem('sb-tclosed', a.checked ? '1' : '0'); return renderTasks(); }
   const id = a.closest('.tdet')?.previousElementSibling?.dataset.tid, t = window.TASKS.tasks.find(x => x.id === id);
   if (!t || !SERVED) return;
   if (a.dataset.act === 'due') { t.due = a.value; renderTasks(); taskAction(['edit', id, 'due=' + a.value]); }
