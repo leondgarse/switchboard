@@ -1,0 +1,146 @@
+{
+ "case-demos": [
+  -226,
+  379
+ ],
+ "work_buddy": [
+  414,
+  669
+ ],
+ "rstn_local": [
+  1274,
+  258
+ ],
+ "pace-connector": [
+  840,
+  366
+ ],
+ "retail-copilot.dev": [
+  824,
+  496
+ ],
+ "qwen_asr_web": [
+  414,
+  467
+ ],
+ "ocr-bench": [
+  412,
+  205.0
+ ],
+ "keystone-ai-system": [
+  824,
+  61.0
+ ],
+ "detection_annotation": [
+  407,
+  374
+ ],
+ "DocAtlas-Harness-qwen": [
+  412,
+  45.0
+ ],
+ "Cocoa_Shared": [
+  1768,
+  18
+ ],
+ "ollama_local_essay_writer": [
+  1266,
+  117
+ ],
+ "mem0": [
+  0,
+  832.0
+ ],
+ "hermes-agent": [
+  412,
+  901.0
+ ],
+ "deepseek-harness": [
+  412,
+  809.0
+ ],
+ "msi5006_tests": [
+  0,
+  1109.0
+ ],
+ "cc-menubar": [
+  272,
+  1109.0
+ ],
+ "draftway": [
+  544,
+  1109.0
+ ],
+ "model_performance": [
+  816,
+  1109.0
+ ],
+ "NeteaseCloudMusicDownloader": [
+  1088,
+  1109.0
+ ],
+ "portfolio": [
+  1360,
+  1109.0
+ ],
+ "run_club": [
+  0,
+  1395.0
+ ],
+ "server_chat": [
+  272,
+  1395.0
+ ],
+ "_routes": {
+  "DocAtlas-Harness-qwen>Cocoa_Shared": [
+   45.0,
+   45.0
+  ],
+  "case-demos>Cocoa_Shared": [
+   29.0,
+   29.0,
+   29.0
+  ],
+  "case-demos>keystone-ai-system": [
+   189.0
+  ],
+  "case-demos>retail-copilot.dev": [
+   609.0
+  ],
+  "case-demos>rstn_local": [
+   625.0,
+   517.0
+  ],
+  "keystone-ai-system>Cocoa_Shared": [
+   61.0
+  ]
+ },
+ "_kids": {
+  "keystone-ai-system": [
+   "keystone-ai-system/ai-core",
+   "keystone-ai-system/admin-service",
+   "keystone-ai-system/admin-ui",
+   "keystone-ai-system/agent-service",
+   "keystone-ai-system/test-cases"
+  ],
+  "mem0": [
+   "mem0/evaluation"
+  ],
+  "msi5006_tests": [
+   "msi5006_tests/c2pa-python",
+   "msi5006_tests/c2pa-rs",
+   "msi5006_tests/msd-sdk-python",
+   "msi5006_tests/msi5006_tests",
+   "msi5006_tests/zef"
+  ]
+ },
+ "_shelf_y": 1069.0,
+ "temp": [
+  544,
+  1395.0
+ ],
+ "switchboard": [
+  816,
+  1395.0
+ ]
+}

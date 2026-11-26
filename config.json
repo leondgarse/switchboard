@@ -1,0 +1,6 @@
+{
+ "center": "case-demos",
+ "exclude": [
+  "temp"
+ ]
+}
