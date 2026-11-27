@@ -9,6 +9,7 @@ POST /api/layout  {id: [x, y], ...}   -> merged into layout.json
 POST /api/config  {exclude: [...], center: "..."} -> merged into config.json
 POST /api/labels  {"source>target": "short label", ...} -> merged into labels.json
 POST /api/relayout                    -> recompute the layered layout from scratch
+POST /api/move    {sessionId, from, to, force?} -> copy a session's transcript to another host (move_session.py)
 Each save re-renders graph.js and the vault (no rescan).
 """
 import json, os, subprocess, sys, threading, time, urllib.request
@@ -88,7 +89,7 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
-        if self.path in ("/api/tasks", "/api/open"):
+        if self.path in ("/api/tasks", "/api/open", "/api/move"):
             try:
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
             except Exception:
@@ -100,6 +101,15 @@ class Handler(SimpleHTTPRequestHandler):
                 subprocess.Popen(["open", path])
                 self.send_response(204)
                 return self.end_headers()
+            if self.path == "/api/move":
+                r = subprocess.run([sys.executable, str(HERE / "move_session.py"), str(body.get("sessionId", "")),
+                                    str(body.get("from", "")), str(body.get("to", ""))] + (["--force"] if body.get("force") else []), capture_output=True, text=True, timeout=300)
+                out = (r.stdout.strip().splitlines() or ['{"ok": false, "error": "no output"}'])[-1].encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(out)))
+                self.end_headers()
+                return self.wfile.write(out)
             args = [str(x) for x in body.get("args", [])]
             if not args or args[0] not in TASK_CMDS:
                 return self.send_error(400, "unknown tasks command")

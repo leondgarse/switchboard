@@ -3,7 +3,7 @@
 A map of the git repos under `~/workspace`, plus the Claude Code sessions running in them across hosts.
 
 - **Architecture tab:** each repo is a card, and submodules or nested repos sit inside their parent's box. References between repos read left to right: a repo naming another one, or depending on its package. Each link has a short editable label (`labels.json`), and `case-demos` is the hub. Live sessions show as small squares on each card: red is waiting for input, orange is working, green is idle.
-- **Sessions tab:** one row per repo that has a live session and one column per host. Arcs on the left show which running sessions *should* talk, based on how the repo map connects their repos. Click a session to copy its `claude --resume` command; for a remote host it's wrapped in `ssh -t`.
+- **Sessions tab:** one row per repo that has a live session and one column per host. Arcs on the left show which running sessions *should* talk, based on how the repo map connects their repos. Click a session to copy its `claude --resume` command; for a remote host it's wrapped in `ssh -t`. Drag a Claude Code session onto another host's column to copy it there (`move_session.py`): its transcript and subagent folder are copied with the home directory rewritten, and the `claude -r` command for that host is put on the clipboard. The original session stays open. It refuses when the session is running on the destination or that host's copy was continued there (it has turns the source lacks); you can then force it, and the replaced copy is kept in `.switchboard-moved/`.
 
 ## Run
 

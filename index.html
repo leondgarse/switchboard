@@ -218,6 +218,7 @@
   #sgrid .hcol { display: flex; flex-direction: column; gap: 6px; border-left: 1px dashed var(--line); padding-left: 10px; min-height: 40px; }
   .chip-s { background: var(--card-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; cursor: copy; }
   .chip-s:hover { border-color: #5b5f6b; }
+  #sgrid .hcol.drop { background: rgba(127,216,208,.08); border-left: 1px solid #7fd8d0; border-radius: 4px; }
   .chip-s .top { display: flex; align-items: center; gap: 7px; font: 500 12px var(--mono); }
   .chip-s .d { width: 8px; height: 8px; border-radius: 2px; flex: none; }
   .chip-s.idle .d { background: var(--s-idle); } .chip-s.work .d { background: var(--s-work); } .chip-s.wait .d { background: var(--s-wait); }
@@ -509,7 +510,7 @@ function applyLive(snap, room) {
     const mail = Object.entries(unread).filter(([k]) => snap.sessions.some(s => s.sessionId === k)).reduce((a, [, v]) => a + v, 0);
     document.getElementById('liveCount').textContent = (n ? ' ' + n : '') + (mail ? ' ✉' + mail : '');
     if (sig !== live.sig) { live.sig = sig; render(); }
-    renderSessions();
+    if (!live.drag) renderSessions();   // re-rendering mid-drag would drop the dragged chip
   }
 }
 
@@ -574,10 +575,11 @@ function renderSessions() {
            : `<div class="rn">${esc(k.slice(1).split('/').pop() || k.slice(1))}</div><div class="rp">not a workspace repo · ${esc(k.slice(1))}</div>`)
       + (relHtml ? `<div class="rel">${relHtml}</div>` : '') + '</div>';
     for (const host of hosts) {
-      h += `<div class="hcol" data-row="${esc(k)}">` + rows[k].filter(s => s.host === host).map((s, i) => {
+      h += `<div class="hcol" data-row="${esc(k)}" data-host="${esc(host)}">` + rows[k].filter(s => s.host === host).map((s, i) => {
         const cmd = resumeCmd(s);
-        const hint = EMBED ? '\n\nclick to jump to its terminal (or copy a resume command)' : (cmd ? '\n\nclick to copy: ' + cmd : '');
-        return `<div class="chip-s ${kindOf(s.status)}" data-host="${esc(s.host)}" data-sid="${esc(s.sessionId)}" ${cmd ? `data-copy="${esc(cmd)}"` : ''} title="${esc(sessTip(s) + hint)}" style="cursor:${EMBED ? 'pointer' : 'copy'}">
+        const hint = (EMBED ? '\n\nclick to jump to its terminal (or copy a resume command)' : (cmd ? '\n\nclick to copy: ' + cmd : ''))
+          + (s.tool === 'cc' && hosts.length > 1 ? '\ndrag to another host\'s column to copy the session there' : '');
+        return `<div class="chip-s ${kindOf(s.status)}" data-host="${esc(s.host)}" data-sid="${esc(s.sessionId)}" data-name="${esc(s.name)}" ${s.tool === 'cc' ? 'draggable="true"' : ''} ${cmd ? `data-copy="${esc(cmd)}"` : ''} title="${esc(sessTip(s) + hint)}" style="cursor:${EMBED ? 'pointer' : 'copy'}">
           <div class="top"><span class="d"></span>${esc(truncate(s.name, 26))}${room && room.unread[s.sessionId] ? `<span class="mail" title="unread room messages">✉${room.unread[s.sessionId]}</span>` : ''}${s.tool !== 'cc' ? ` <span class="tool">${esc(s.tool.toUpperCase())}</span>` : ''}<span class="age">${esc(s.status)} ${sinceTxt(s.statusSince)}</span></div>
           <div class="tl">${esc(s.title || '—')}</div>${roomSess[s.sessionId]?.status ? `<div class="st">▸ ${esc(roomSess[s.sessionId].status)}</div>` : ''}</div>`;
       }).join('') + '</div>';
@@ -1270,6 +1272,54 @@ sgrid.addEventListener('click', async ev => {
   t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 3000);
 });
 addEventListener('resize', () => { if (document.body.classList.contains('tab-sessions')) renderSessions(); });
+
+// drag a Claude Code session onto another host's column: copy its transcript there (move_session.py)
+function toast(msg, ms = 3000) {
+  const t = document.getElementById('stoast');
+  t.textContent = msg; t.style.display = 'block'; clearTimeout(t._h); if (ms) t._h = setTimeout(() => t.style.display = 'none', ms);
+}
+const dropCol = ev => { const c = ev.target.closest('.hcol'); return c && live.drag && c.dataset.host !== live.drag.host ? c : null; };
+const clearDrop = () => sgrid.querySelectorAll('.hcol.drop').forEach(el => el.classList.remove('drop'));
+sgrid.addEventListener('dragstart', ev => {
+  const chip = ev.target.closest('.chip-s[draggable]'); if (!chip) return;
+  live.drag = { host: chip.dataset.host, sid: chip.dataset.sid, name: chip.dataset.name };
+  ev.dataTransfer.effectAllowed = 'copy'; ev.dataTransfer.setData('text/plain', chip.dataset.sid);
+});
+sgrid.addEventListener('dragover', ev => {
+  const c = dropCol(ev); if (!c) return;
+  ev.preventDefault(); ev.dataTransfer.dropEffect = 'copy';
+  if (!c.classList.contains('drop')) { clearDrop(); c.classList.add('drop'); }
+});
+sgrid.addEventListener('dragleave', ev => { if (!sgrid.contains(ev.relatedTarget)) clearDrop(); });
+sgrid.addEventListener('dragend', () => { live.drag = null; clearDrop(); });
+sgrid.addEventListener('drop', async ev => {
+  const c = dropCol(ev), d = live.drag; live.drag = null; clearDrop();
+  if (!c) return;
+  ev.preventDefault();
+  const to = c.dataset.host;
+  if (!confirm(`Copy session "${d.name}" from ${d.host} to ${to}?\n\nIts transcript is copied with the home directory rewritten, ready for claude -r on ${to}. The session on ${d.host} stays open; exit it there.`)) return;
+  moveSession({ sessionId: d.sid, from: d.host, to, name: d.name });
+});
+async function moveSession(m) {
+  toast(`Copying ${m.name} to ${m.to} …`, 0);
+  live.move = m;
+  if (EMBED) return BRIDGE.postMessage({ action: 'move', sessionId: m.sessionId, from: m.from, to: m.to, force: !!m.force });
+  try { moveDone(await fetch('/api/move', { method: 'POST', body: JSON.stringify(m) }).then(r => r.json())); }
+  catch (e) { moveDone({ ok: false, error: String(e) }); }
+}
+// also called by cc-menubar with the script's result (it has already put the resume command on the clipboard)
+window.moveDone = async r => {
+  const m = live.move; live.move = null;
+  if (!r.ok && r.forceable && m && !m.force) {
+    document.getElementById('stoast').style.display = 'none';
+    if (confirm(`Not copied: ${r.error}.\n\nReplace the copy on ${m.to} anyway? The one there now is kept in .switchboard-moved/.`)) moveSession({ ...m, force: true });
+    return;
+  }
+  if (!r.ok) return toast('Copy failed: ' + r.error, 8000);
+  let copied = EMBED;
+  if (!EMBED) try { await navigator.clipboard.writeText(r.resume); copied = true; } catch (e) { }
+  toast(`${r.note}. ${copied ? 'Resume command copied: ' : 'Resume with: '}${r.resume}`, 10000);
+};
 
 render();
 fit();
