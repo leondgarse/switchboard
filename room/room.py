@@ -355,6 +355,16 @@ def cmd_who(a):
 def cmd_send(a):
     re_ = a.re
     sid, name, cwd = me()
+    if not re_ and not a.local and ":" not in a.to and a.to.lower() != "all":   # one session, not a group or human:
+        try:
+            t = find_session(a.to)
+        except Exception:
+            t = None   # let the server resolve it (or say it can't)
+        if t and t["id"] != sid and t["host"] == host_label():
+            print(f"not sent: {t['name'] or t['id'][:8]}@{t['host']} is on this host. Message it with Claude Code's own "
+                  f"messaging (SendMessage{', name ' + t['name'] if t['name'] else ''}). Only if it isn't in your peer list (ListAgents), "
+                  f"run the same command with --local.")
+            sys.exit(1)
     register(sid, name, cwd)
     r = api("POST", "/send", {"session": sid, "to": a.to, "body": " ".join(a.msg),
                               "kind": "reply" if re_ else ("ask" if a.ask else "notify"), "reply_to": re_})
@@ -610,6 +620,8 @@ def _send(p):
     g = p.add_mutually_exclusive_group()
     g.add_argument("--ask", action="store_true", help="a question: the recipient's turn keeps going until it answers")
     g.add_argument("--re", type=int, metavar="ID", help="answer message #ID")
+    p.add_argument("--local", action="store_true", help="send through the room even though the target is on this host "
+                   "(only when Claude Code's own messaging can't reach it)")
 
 
 def _wait(p):

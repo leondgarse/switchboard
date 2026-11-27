@@ -91,7 +91,7 @@ room is also for links, `repo:`/`host:`/`all`, and threads others should be able
 | Command | What it does |
 |---|---|
 | `room who` | Live sessions on every host: `name@host`, id, repo, client version (`?` = older than 0.1.4), state, unread `✉N`, `(listen)` or `(wait #N)` while one runs, links, status. Exited sessions show for 24 h; `--all` shows every session |
-| `room send <to> "msg"` | `<to>` is `name@host` as `who` prints it, an id prefix, `link:NAME`, `repo:REPO`, `host:NAME` or `all` |
+| `room send <to> "msg"` | `<to>` is `name@host` as `who` prints it, an id prefix, `link:NAME`, `repo:REPO`, `host:NAME` or `all`. A single session on your own host is refused (use Claude Code's own messaging); `--local` overrides when that can't reach it |
 | `room send <to> "msg" --ask` | A question: the recipient's turn keeps going until it answers |
 | `room send <to> --re <id> "msg"` | Answer message `#id` |
 | `room wait <id>` | Block until `#id` is answered. Run in the background, it wakes the session when the answer arrives. Both sides run it after each reply while a topic goes on, so the exchange carries on until it is done |
