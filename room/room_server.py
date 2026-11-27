@@ -40,6 +40,8 @@ class Room:
         self.db = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
+        if "version" not in {r["name"] for r in self.q("PRAGMA table_info(sessions)")}:   # added in 0.1.4
+            self.db.execute("ALTER TABLE sessions ADD COLUMN version TEXT DEFAULT ''")
         self.lock = threading.Lock()
         self.cond = threading.Condition(self.lock)   # wakes /wait long-polls when a message arrives
 
@@ -271,6 +273,8 @@ class Handler(BaseHTTPRequestHandler):
                 p = self.path
                 if p == "/seen":
                     R.seen(b["session"], b.get("host"), b.get("name"), b.get("cwd"), b.get("repo"), bool(b.get("ended")))
+                    if b.get("version"):   # the client's room version (0.1.4+); older clients leave it empty
+                        R.db.execute("UPDATE sessions SET version=? WHERE id=?", (str(b["version"])[:20], b["session"]))
                     if "status" in b:
                         R.db.execute("UPDATE sessions SET status=? WHERE id=?", (str(b["status"])[:200], b["session"]))
                     return self.reply(200, {"unread": R.unread().get(b["session"], 0)})

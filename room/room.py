@@ -6,7 +6,7 @@ there is something to deliver, and never fail the session.
 Config: ~/.config/switchboard/room.json {"url": "http://<server>:8766", "token": "...", "host": "<label>"}
 (`room join <url> <token> [--host NAME]` writes it and installs the hooks). Python 3.9+, stdlib only.
 """
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 
 import glob, json, os, re, socket, subprocess, sys, time, urllib.error, urllib.request
 from pathlib import Path
@@ -131,7 +131,7 @@ def me(required=True):
 
 
 def register(sid, name, cwd, **extra):
-    body = {"session": sid, "host": host_label(), "name": name}
+    body = {"session": sid, "host": host_label(), "name": name, "version": __version__}
     if cwd:
         body.update(cwd=cwd, repo=repo_id(git_top(cwd)))
     body.update(extra)
@@ -264,7 +264,7 @@ def hook(event):
     cwd = data.get("cwd") or os.getcwd()
     try:
         # sessions that were already running when the hooks were installed register on their first event
-        mark = CACHE / f"reg-{sid}"
+        mark = CACHE / f"reg-{sid}-{__version__}"   # per version, so an upgrade re-registers and `who` shows it
         if event != "SessionStart" and not mark.exists():
             register(sid, session_name(sid), cwd)
             CACHE.mkdir(parents=True, exist_ok=True)
@@ -331,7 +331,7 @@ def cmd_who(a):
             continue
         u = unread.get(s["id"], 0)
         print(f"{(s['name'] or s['id'][:8]) + '@' + s['host']:<34} {s['id'][:8]}  {s['repo'] or '-':<28} "
-              f"{s['state']:<6} {ago(s['last_seen']):>4}{'  ✉' + str(u) if u else ''}"
+              f"{s.get('version') or '?':<6} {s['state']:<6} {ago(s['last_seen']):>4}{'  ✉' + str(u) if u else ''}"
               f"{'  [' + ', '.join(s['links']) + ']' if s['links'] else ''}{'  — ' + s['status'] if s['status'] else ''}")
     if not rows:
         print("(no sessions yet)")
@@ -563,6 +563,8 @@ SECTIONS = [
 
 def _who(p):
     p.add_argument("--all", action="store_true", help="also sessions that exited more than a day ago")
+    p.description = ("Columns: name@host, id, repo, room version of that machine's client (? = older than 0.1.4), "
+                     "state, last seen, unread, links, status.")
 
 
 def _send(p):
