@@ -31,8 +31,9 @@ def _exe():
 EXE = _exe()
 ROOM = "~" + EXE[len(str(Path.home())):] if EXE.startswith(str(Path.home()) + os.sep) else EXE
 
-HELP = f"""room: message other Claude Code sessions (this machine or others). Use it only when another
-session needs to know or answer something.
+HELP = f"""room: message other Claude Code sessions (this machine or others).
+
+Messaging (use it only when another session needs to know or answer something):
   {ROOM} who                         sessions (live/exited), what they do, their links
   {ROOM} send <to> "msg" [--ask]     to = name@host (as in `who`) | id prefix | link:NAME | repo:REPO | host:NAME | all
   {ROOM} send <to> --re <id> "msg"   answer message #id
@@ -44,12 +45,20 @@ session needs to know or answer something.
                                      links group sessions or whole repos on one topic; files matching
                                      --watch globs (repo-relative) auto-notify the link when edited
   {ROOM} thread [NAME]               recent messages (all, or one link)
-  {ROOM} join <url> <token> [--host NAME]   set up this machine: write the config and install the hooks
-  {ROOM} serve [--port 8766] [--service]   run a room server here (makes a token on first run); --service prints a
-                                     launchd/systemd unit that keeps it running
-  {ROOM} update                      upgrade room on this machine (pipx, uv tool or pip, whichever installed it)
 Keep messages short and concrete. Don't poll. Don't end a turn saying you are waiting for an answer
-unless `room wait` is running in the background; an idle session gets messages only at its next prompt."""
+unless `room wait` is running in the background; an idle session gets messages only at its next prompt.
+
+Update (any session may run it when told a new room is out):
+  {ROOM} update                      upgrade room on this machine (pipx, uv tool or pip, whichever installed it)
+  {ROOM} --version                   the installed version
+
+Set up this machine (once, by a person):
+  {ROOM} join <url> <token> [--host NAME]   write the config, check the server, install the hooks
+  {ROOM} install-hooks               (re)install only the hooks in ~/.claude/settings.json
+
+Run a room server (on one machine, by a person):
+  {ROOM} serve [--port 8766]         serve a room here; the first run makes a token and prints the join line
+  {ROOM} serve --service             print a launchd/systemd unit that keeps it running"""
 
 
 def cfg():
