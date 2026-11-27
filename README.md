@@ -80,7 +80,25 @@ controls a session; sessions only post and receive.
 - **Same-file heads-up:** if another live session edited the same file in the last 20 minutes, the editor is told.
 - Sessions find their own id by walking up the process tree to Claude Code's `~/.claude/sessions/<pid>.json`.
 
-    room who | send <name@host|link:X|repo:X|host:X|all> "msg" [--ask] | send <to> --re ID "msg" | wait ID | inbox | status "…" | link … | thread [NAME]
+### Common commands
+
+`room help` lists everything, grouped by who uses it; `room <command> -h` shows one command in detail.
+
+| Command | What it does |
+|---|---|
+| `room who` | Live sessions on every host: `name@host`, id, repo, client version (`?` = older than 0.1.4), state, unread `✉N`, `(listen)` or `(wait #N)` while one runs, links, status. Exited sessions show for 24 h; `--all` shows every session |
+| `room send <to> "msg"` | `<to>` is `name@host` as `who` prints it, an id prefix, `link:NAME`, `repo:REPO`, `host:NAME` or `all` |
+| `room send <to> "msg" --ask` | A question: the recipient's turn keeps going until it answers |
+| `room send <to> --re <id> "msg"` | Answer message `#id` |
+| `room wait <id>` | Block until `#id` is answered. Run in the background, it wakes the session when the answer arrives |
+| `room listen` | Keep an idle session reachable: run in the background, it ends (and wakes the session) when an ask or reply arrives; restart it after each. No tokens while waiting. `--all` wakes on every message |
+| `room inbox [--peek]` | Your unread messages. `--session name@host` peeks at another session's, leaving them unread |
+| `room thread [LINK]` | Recent messages, all or one link's |
+| `room status "now: …"` | One line on what this session is doing, shown in `who` |
+| `room link list \| create \| join \| leave` | Topic groups; `join NAME --repo --watch 'glob'` covers a whole repo and notifies the link when matching files change |
+| `room update` | Upgrade a PyPI install (pipx, uv tool or pip). Hosts in cc-menubar's config get `room` from `deploy.sh` instead |
+| `room join <url> <token> --host NAME` | Set up a new machine: config, server check, hooks |
+| `room serve` | Run a room server (the first run makes a token); `--service` prints a launchd/systemd unit |
 
 Links now: `ocr-accuracy` (ocr-bench ⇄ keystone-ai-system/ai-core, watching `*ocr*`) and `meeting-asr`
 (qwen_asr_web `server.py`/`web_server.py` ⇄ case-demos `toolbox/meeting/server/*`).
@@ -88,8 +106,8 @@ Links now: `ocr-accuracy` (ocr-bench ⇄ keystone-ai-system/ai-core, watching `*
 | Task | How |
 |---|---|
 | Update all hosts | `room/deploy.sh [--restart]` (hosts from cc-menubar's config; server host `MS`) |
-| Someone else joins (any host on the LAN) | `pipx install switchboard-room && room join http://<MS-IP>:8766 <token> --host <name>` (see `room/README.md`) |
-| Release to PyPI | Bump `__version__` in `room/room.py`, then `git tag v<version> && git push origin v<version>`; `.github/workflows/publish.yml` publishes with trusted publishing. Colleagues' first session after that is told to run `room update`; to push it now, `room send all "room <version> is out: run room update"` |
-| Server on MS | cron runs `ensure-server.sh` (from `room/`, deployed to `~/.local/share/switchboard/`) every 5 min and at boot. Data in `~/.local/share/switchboard/room.db` |
+| Someone else joins (any host on the LAN) | `pipx install switchboard-room && room join http://<MS-IP>:8766 <token> --host <name>` (see `room/README.md`). The token is `"token"` in `~/.config/switchboard/room.json` |
+| Release to PyPI | Only for changes worth a release (small fixes ride along with the next one). Bump `__version__` in `room/room.py`, commit, `room/deploy.sh`, then `git push origin main && git tag v<version> && git push origin v<version>`; `.github/workflows/publish.yml` publishes with trusted publishing. Colleagues' first session after that is told to run `room update`; to push it now, `room send all "room <version> is out: run room update"` |
+| Server on MS | `room/room_server.py`; cron runs `ensure-server.sh` (from `room/`, deployed to `~/.local/share/switchboard/`) every 5 min and at boot. Data in `~/.local/share/switchboard/room.db` |
 | Config on each host | `~/.config/switchboard/room.json` `{url, token, host}` (mode 600). The server address is MS's LAN IP |
 | Remove hooks | Restore `~/.claude/settings.json.bak-switchboard`, or delete the `room hook` entries |
