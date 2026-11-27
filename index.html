@@ -123,9 +123,10 @@
   #tasks .thead { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; font: 12px var(--mono); color: var(--muted); }
   #tasks .thead h2 { margin: 0; font: 600 14px var(--mono); color: var(--text); }
   #tasks .thead .warn { color: var(--a-warm); }
-  #tadd { display: flex; gap: 6px; margin-left: auto; }
-  #tadd select, #tadd input { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font: 12px var(--mono); }
-  #tadd input { width: 360px; } #tadd input:focus, #tadd select:focus { outline: 1px solid var(--accent); }
+  .tnp { display: flex; gap: 6px; align-items: center; border: 1px dashed var(--line); border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; font: 600 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  #tgrid:not(.yours) .tnp { margin: 0; }
+  .tnp input { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 4px 8px; font: 12px var(--mono); letter-spacing: 0; text-transform: none; }
+  .tnp #npp { width: 190px; } .tnp #npt { flex: 1; min-width: 120px; } .tnp input:focus { outline: 1px solid var(--accent); }
   #tgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 14px; align-items: start; }
   #tgrid.yours { display: block; max-width: 1360px; }
   .ycols { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; align-items: start; }
@@ -155,7 +156,10 @@
   .tc.pending { color: var(--muted); } .tc.err { color: var(--danger); } .tc.gpu { color: #7fd8d0; border-color: #2f5552; }
   .tdet { margin: 4px 0 6px 21px; padding: 8px 10px; background: var(--card-2); border-radius: 6px; font: 11.5px var(--mono); line-height: 1.5; }
   .tdet .tt { color: var(--text); font-weight: 600; margin-bottom: 4px; }
-  .tdet .q { color: var(--a-warm); } .tdet pre { white-space: pre-wrap; margin: 6px 0; font: inherit; color: #c9ccd3; }
+  .tdet .q { color: var(--a-warm); }
+  .tdet .qa { display: flex; gap: 6px; margin: 2px 0 6px 12px; } .tdet .qa input { flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 2px 6px; font: 11.5px var(--mono); }
+  .tdet .qa input:focus { outline: 1px solid var(--accent); }
+  .tdet .qd { color: var(--muted); } .tdet .qd b { color: var(--s-idle); font-weight: 400; } .tdet .qd .x { cursor: pointer; margin-left: 6px; opacity: .6; } .tdet .qd .x:hover { color: var(--danger); opacity: 1; } .tdet pre { white-space: pre-wrap; margin: 6px 0; font: inherit; color: #c9ccd3; }
   .tdet .fl { color: var(--muted); } .tdet .btns { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .tdet .btns input[type=date], .tdet .btns select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 4px; font: 11px var(--mono); padding: 1px 4px; }
   #ttoast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line);
@@ -248,8 +252,7 @@
 </head>
 <body>
 <nav id="tabs"><button data-tab="arch" class="on">Architecture</button><button data-tab="sessions">Sessions<span class="badge" id="liveCount"></span></button><button data-tab="tasks">Tasks<span class="badge" id="taskCount"></span></button></nav>
-<div id="tasks"><div class="thead"><h2>tasks</h2><span id="tview"><button data-v="yours">Yours</button><button data-v="boards">Repo boards</button></span><span id="tmeta"></span>
-  <form id="tadd"><select id="tproj"></select><input id="ttext" placeholder="new task… (Enter adds; Claude reviews it. Start with “! ” = high priority, “- ” = no review)" autocomplete="off"></form></div>
+<div id="tasks"><div class="thead"><h2>tasks</h2><span id="tview"><button data-v="yours">Yours</button><button data-v="boards">Repo boards</button></span><span id="tmeta"></span></div>
   <div id="tgrid"></div><div id="ttoast"></div></div>
 <div id="sessions"><div class="shead"><h2>live sessions</h2><span id="smeta"></span><span class="hosts" id="shosts"></span>
   <span class="slegend"><span style="border-color:#7fd8d0"></span>room link<span style="border-color:var(--e-mentions);border-top-style:dashed"></span>related on the repo map (could talk)</span></div>
@@ -617,7 +620,7 @@ function renderRoom() {
 }
 
 // ---------- tasks tab ----------
-const tstate = { linking: '', adding: null, open: new Set(), more: new Set(), view: localStorage.getItem('sb-tview') || 'yours', project: '', q: '', closed: localStorage.getItem('sb-tclosed') !== '0' };
+const tstate = { qa: {}, np: { p: '', t: '' }, linking: '', adding: null, open: new Set(), more: new Set(), view: localStorage.getItem('sb-tview') || 'yours', project: '', q: '', closed: localStorage.getItem('sb-tclosed') !== '0' };
 function reloadTasks() {
   const sc = document.createElement('script');
   sc.src = 'tasks/tasks.js?' + Date.now();
@@ -671,9 +674,14 @@ function taskRow(t, R, opts = {}) {
   if (!isOpen) return h;
   const repo = repoKey(t.repo), projects = [...new Set(window.TASKS.tasks.map(x => x.project))];
   h += '<div class="tdet">';
+  const answers = t.answers || [], answered = q => answers.some(x => x.q === q.replace(/→/g, '->').split(/\s+/).join(' ').trim());
+  // your answers (kept in tasks.md under the task) first, then the review's open questions, each with a box to answer it
+  h += answers.map((x, i) => `<div class="qd">? ${esc(x.q)} → <b>${esc(x.a)}</b><span class="x" data-act="unanswer" data-qi="${i}" title="remove this answer">×</span></div>`).join('');
   if (rv && !rv.error) {
     h += `<div class="tt">${esc(rv.title || '')}</div>`
-      + (rv.questions || []).map(q => `<div class="q">? ${esc(q)}</div>`).join('')
+      + (rv.questions || []).filter(q => !answered(q)).map(q => `<div class="q">? ${esc(q)}</div>`
+        + (SERVED && active ? `<form class="qa" data-q="${esc(q)}"><input id="qa-${t.id}-${esc(q.length + '-' + q.slice(0, 12).replace(/\W/g, ''))}" value="${esc(tstate.qa[t.id + '\n' + q] || '')}" placeholder="answer… (Enter saves it and reviews again)" autocomplete="off">`
+          + `<button type="button" class="small" data-act="yourcall" title="let the review pick a sensible default and state it">your call</button></form>` : '')).join('')
       + `<pre>${esc(rv.proposal || '')}</pre>`
       + (rv.files && rv.files.length ? `<div class="fl">files: ${rv.files.map(esc).join(' · ')}</div>` : '')
       + (rv.needs_gpu ? `<div class="fl">needs a GPU: <code>ssh ${esc(rv.gpu_host || '')}</code></div>` : '');
@@ -705,11 +713,18 @@ function repoLabel(p, repo) {
 const addBtn = (p, sec) => `<span class="padd" data-add="${esc(p)}" data-sec="${sec}" title="add a task to ${esc(p)}">+</span>`;
 const addForm = (p, sec) => tstate.adding && tstate.adding.p === p && tstate.adding.sec === sec
   ? `<form class="tnew"><input class="tnewi" value="${esc(tstate.adding.v)}" placeholder="new task in ${esc(p)}… (Enter adds, Esc cancels; “! ” = high priority, “- ” = no review)" autocomplete="off"></form>` : '';
+// at the bottom of the board: a new project and its first task (an existing project name adds to it)
+const newProjForm = () => `<div class="tnp">new project<input id="npp" list="nprepos" value="${esc(tstate.np.p)}" placeholder="name (a repo name links it)" autocomplete="off">`
+  + `<datalist id="nprepos">${Object.keys(repos).sort().map(r => `<option value="${esc(r)}">`).join('')}</datalist>`
+  + `<input id="npt" value="${esc(tstate.np.t)}" placeholder="first task… (Enter adds; “! ” = high priority, “- ” = no review)" autocomplete="off"></div>`;
 function renderTasks() {
-  const a = tstate.adding, prev = document.activeElement?.classList.contains('tnewi') ? document.activeElement : null;
-  const caret = prev ? [prev.selectionStart, prev.selectionEnd, prev.selectionDirection] : null;   // a refresh keeps the cursor where it was
+  // a refresh (every 8s) rebuilds the board: keep focus and the cursor in whichever text box had them
+  const a = tstate.adding, el = document.activeElement;
+  const sel = el && el.tagName === 'INPUT' && /^(text|search)$/.test(el.type) && document.getElementById('tgrid').contains(el)
+    ? (el.id ? '#' + el.id : el.classList.contains('tnewi') ? '.tnewi' : '') : '';
+  const caret = sel ? [el.selectionStart, el.selectionEnd, el.selectionDirection] : null;
   renderTasksInner();
-  const i = a && (a.focus || prev) && document.querySelector('#tgrid .tnewi');
+  const i = sel ? document.querySelector('#tgrid ' + sel) : a && a.focus && document.querySelector('#tgrid .tnewi');
   if (i) { i.focus(); caret ? i.setSelectionRange(...caret) : i.setSelectionRange(i.value.length, i.value.length); }
   if (a) a.focus = false;
 }
@@ -726,15 +741,7 @@ function renderTasksInner() {
   const repoOpen = T.todos.reduce((a, f) => a + f.items.filter(i => i.state === 'open' || i.state === 'doing').length, 0);
   meta.innerHTML = `${openMine.length} of yours open${unclear ? ` · <span class="warn">${unclear} need an answer</span>` : ''}${pending ? ` · ${pending} being reviewed` : ''} · ${repoOpen} open in ${T.todos.length} repo TODO files`
     + (SERVED ? '' : ' · <span class="warn">read-only: open via cc-menubar or serve.py to edit</span>');
-  // project picker
-  const sel = document.getElementById('tproj'), cur = sel.value;
-  const projects = [...new Set(T.tasks.map(t => t.project))];
-  sel.innerHTML = projects.map(p => `<option>${esc(p)}</option>`).join('') + '<option value="__new">new project…</option>';
-  if (projects.includes(cur)) sel.value = cur;
-  if (tstate.view === 'yours') {
-    if (tstate.project && projects.includes(tstate.project)) sel.value = tstate.project;
-    return renderYours(T, R, grid);
-  }
+  if (tstate.view === 'yours') return renderYours(T, R, grid);
   grid.classList.remove('yours');
   // project cards: your projects first (file order), then repos that only have TODO files
   const cards = [];
@@ -764,7 +771,7 @@ function renderTasksInner() {
     }
     h += '</div>';
   }
-  grid.innerHTML = h || '<div class="empty">No tasks and no TODO files found.</div>';
+  grid.innerHTML = (h || '<div class="empty">No tasks and no TODO files found.</div>') + newProjForm();
 }
 
 // "Yours": every task you wrote, in one list across projects
@@ -801,7 +808,8 @@ function renderYours(T, R, grid) {
       || `<div class="fl" style="font:11.5px var(--mono);color:var(--muted)">${empty}</div>`) + '</div>';
   h += `<div class="ycols${tstate.closed ? '' : ' one'}"><div class="ymain">`;
   if (doing.length) h += sec('in progress', doing, '');
-  h += sec('next', next, q || pf ? 'nothing matches' : 'nothing open: add one above');
+  h += sec('next', next, q || pf ? 'nothing matches' : 'nothing open: add a project below');
+  h += newProjForm();
   // closed: on the right, grouped by the week it was closed (weeks start Monday); older than last week starts collapsed
   h += '</div>';
   if (tstate.closed) {
@@ -825,9 +833,7 @@ function renderYours(T, R, grid) {
     h += '</div></div>';
   }
   h += '</div>';
-  const focus = document.activeElement && document.activeElement.id === 'tq', caret = focus ? document.activeElement.selectionStart : 0;
   grid.innerHTML = h;
-  if (focus) { const i = document.getElementById('tq'); i.focus(); i.setSelectionRange(caret, caret); }
 }
 
 document.getElementById('tgrid').addEventListener('click', ev => {
@@ -862,6 +868,8 @@ document.getElementById('tgrid').addEventListener('click', ev => {
   if (act === 'toggle') set(t.state === 'done' || t.state === 'dropped' ? 'open' : 'done');
   if (act === 'start') set('doing');
   if (act === 'pause') set('open');
+  if (act === 'yourcall') return answerQ(t, a.closest('form.qa').dataset.q, 'your call');
+  if (act === 'unanswer') { const x = (t.answers || [])[+a.dataset.qi]; if (x) answerQ(t, x.q, ''); return; }
   if (act === 'skip') { t.review = t.review === 'skip' ? '' : 'skip'; renderTasks(); taskAction(['edit', id, 'review=' + t.review]); }
   if (act === 'pri') { t.pri = t.pri === 'high' ? '' : 'high'; renderTasks(); taskAction(['edit', id, 'pri=' + t.pri]); }
   if (act === 'edit') { const v = prompt('Task text:', t.text); if (v && v.trim() && v.trim() !== t.text) { t.text = v.trim(); renderTasks(); taskAction(['edit', id, 'text=' + t.text]); } }
@@ -869,6 +877,14 @@ document.getElementById('tgrid').addEventListener('click', ev => {
   if (act === 'rereview') { delete window.TASKS.reviews[id]; renderTasks(); taskAction(['review', id]); }
   if (act === 'send' && confirm('Send this task and its proposal to the live sessions of this repo?')) taskAction(['send', id]);
 });
+// answering a review question: tasks.py edit <id> q=… a=… saves it under the task in tasks.md and reviews it again
+function answerQ(t, q, v) {
+  delete tstate.qa[t.id + '\n' + q];   // the draft is keyed by the question as the review wrote it
+  q = q.replace(/→/g, '->').split(/\s+/).join(' ').trim(); v = v.split(/\s+/).join(' ').trim();   // as tasks.py stores them
+  t.answers = (t.answers || []).filter(x => x.q !== q).concat(v ? [{ q, a: v }] : []);
+  if (v) delete window.TASKS.reviews[t.id];   // shows "reviewing…" until the new review lands
+  renderTasks(); taskAction(['edit', t.id, 'q=' + q, 'a=' + v]);
+}
 let toastTimer;
 function undoToast(msg, undo) {
   const el = document.getElementById('ttoast');
@@ -901,8 +917,19 @@ document.getElementById('tgrid').addEventListener('change', ev => {
 document.getElementById('tgrid').addEventListener('input', ev => {
   if (ev.target.id === 'tq') { tstate.q = ev.target.value; renderTasks(); }
   if (ev.target.classList.contains('tnewi') && tstate.adding) tstate.adding.v = ev.target.value;
+  if (ev.target.id === 'npp') tstate.np.p = ev.target.value;
+  const qf = ev.target.closest('form.qa'), qid = qf && qf.closest('.tdet')?.previousElementSibling?.dataset.tid;
+  if (qf && qid) tstate.qa[qid + '\n' + qf.dataset.q] = ev.target.value;
+  if (ev.target.id === 'npt') tstate.np.t = ev.target.value;
 });
 document.getElementById('tgrid').addEventListener('submit', ev => {
+  if (ev.target.classList.contains('qa')) {   // Enter in a question's answer box
+    ev.preventDefault();
+    const id = ev.target.closest('.tdet')?.previousElementSibling?.dataset.tid, t = window.TASKS.tasks.find(x => x.id === id);
+    const v = ev.target.querySelector('input').value.trim();
+    if (t && v) answerQ(t, ev.target.dataset.q, v);
+    return;
+  }
   if (!ev.target.classList.contains('tnew') || !tstate.adding) return;
   ev.preventDefault();
   const { p, v } = tstate.adding, text = v.trim();
@@ -915,21 +942,22 @@ document.getElementById('tgrid').addEventListener('focusout', ev => {
 });
 document.getElementById('tgrid').addEventListener('keydown', ev => {
   if (ev.key === 'Escape' && ev.target.classList.contains('prepo')) { tstate.linking = ''; renderTasks(); }
+  if (ev.key === 'Enter' && (ev.target.id === 'npp' || ev.target.id === 'npt') && !ev.isComposing) {   // two inputs: no implicit submit, so Enter is handled here
+    ev.preventDefault();
+    if (!SERVED) return alert('Adding needs cc-menubar\'s board or serve.py.');
+    const p = tstate.np.p.trim(), text = tstate.np.t.trim();
+    if (!p) return document.getElementById('npp').focus();
+    if (!text) return document.getElementById('npt').focus();
+    tstate.np = { p: '', t: '' }; renderTasks();
+    taskAction(['add', p, text]);
+  }
   if (ev.key === 'Escape' && ev.target.classList.contains('tnewi')) { tstate.adding = null; renderTasks(); }
 });
 document.getElementById('tview').addEventListener('click', ev => {
   const v = ev.target.closest('button')?.dataset.v; if (!v) return;
   tstate.view = v; localStorage.setItem('sb-tview', v); renderTasks();
 });
-document.getElementById('tadd').addEventListener('submit', ev => {
-  ev.preventDefault();
-  if (!SERVED) return alert('Adding needs cc-menubar\'s board or serve.py.');
-  const inp = document.getElementById('ttext'), text = inp.value.trim(); if (!text) return;
-  let proj = document.getElementById('tproj').value;
-  if (proj === '__new') { proj = (prompt('Project name (a repo name links it to that repo):') || '').trim(); if (!proj) return; }
-  inp.value = '';
-  taskAction(['add', proj, text]);
-});
+
 
 function render() {
   computeGeometry(); route();

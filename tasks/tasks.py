@@ -5,6 +5,7 @@
   tasks.py add "<project>" "<task text>"    add one task (then reviews it in the background)
   tasks.py set <id> open|doing|done|dropped change a task's state
   tasks.py edit <id> key=value …            change text=, project=, pri=high|"", review=skip|"" or due=YYYY-MM-DD|""
+                                            (q=<question> a=<answer>|"" answers a review question, then re-reviews)
                                             (repo=<folder under ~/workspace>|"" relinks the task's whole project)
   (add: start the text with "! " for high priority, "- " to skip the review; both work: "! - text")
   tasks.py review [<id>…] [--all]           ask Claude whether new tasks are clear + for a short proposal
@@ -35,6 +36,8 @@ TASK_PROJECTS = {"claude task board and chatting room": "switchboard",
                  "a todo list that agent can auto track, pick, update": "switchboard"}
 
 HEAD_RE = re.compile(r"^##\s+(.+?)\s*$")
+ANSWER_RE = re.compile(r"^\s+- \?\s+(.+?)\s+→\s+(.+?)\s*$")   # under an item: "  - ? question → answer"
+YOUR_CALL = "your call"
 ITEM_RE = re.compile(r"^- \[([ ~xX-])\]\s+(.*?)\s*(?:<!--\s*t:(\w+)((?:\s+\w+:\S+)*)\s*-->)?\s*$")
 META = ("pri", "review", "due", "added", "since", "done")   # review:skip = never auto-reviewed   # kept in the item's comment: <!-- t:id pri:high due:2026-12-01 … -->
 
@@ -56,12 +59,19 @@ def load_tasks():
             project, _, r = name.partition(" · repo: ")
             project, repo = project.strip(), r.strip()
             continue
+        if line[:1] in (" ", "\t") and line.strip() and out:   # indented under the item above
+            m = ANSWER_RE.match(line)
+            if m:
+                out[-1]["answers"].append({"q": m.group(1), "a": m.group(2)})
+            else:
+                out[-1]["notes"].append(line.rstrip())
+            continue
         m = ITEM_RE.match(line)
         if m:
             text = m.group(2)
             meta = dict(kv.split(":", 1) for kv in (m.group(4) or "").split())
             out.append({"id": m.group(3) or tid(project, text), "project": project, "repo": repo,
-                        "state": STATES[m.group(1)], "text": text, "line": i,
+                        "state": STATES[m.group(1)], "text": text, "line": i, "answers": [], "notes": [],
                         **{k: meta.get(k, "") for k in META}})
     return out
 
@@ -79,6 +89,7 @@ def write_tasks(tasks):
             if (t["project"], t["repo"]) == (project, repo):
                 meta = "".join(f" {k}:{t[k]}" for k in META if t.get(k))
                 lines.append(f"- [{MARK[t['state']]}] {t['text']} <!-- t:{t['id']}{meta} -->")
+                lines += t.get("notes", []) + [f"  - ? {x['q']} → {x['a']}" for x in t.get("answers", [])]
         lines.append("")
     TASKS_MD.write_text("\n".join(lines))
 
@@ -100,13 +111,13 @@ def add_task(project, text, repo=None):
     tasks = load_tasks()
     text = " ".join(text.split())
     pri = skip = ""
-    while text[:2] in ("! ", "- "):   # "! " = high priority, "- " = no Claude review
+    while len(text) > 1 and text[0] in "!-\u2013\u2014" and text[1] == " ":   # "! " = high priority, "- " = no Claude review (– and — too: smart punctuation)
         pri, skip = (("high", skip) if text[0] == "!" else (pri, "skip"))
         text = text[2:].strip()
     if repo is None:
         repo = repo_for(project, tasks)
     t = {"id": tid(project, text), "project": project, "repo": repo, "state": "open", "text": text,
-         "pri": pri, "review": skip, "due": "", "added": today(), "since": "", "done": ""}
+         "pri": pri, "review": skip, "due": "", "added": today(), "since": "", "done": "", "answers": [], "notes": []}
     if any(x["id"] == t["id"] for x in tasks):
         return None
     # keep a project's tasks together
@@ -126,6 +137,7 @@ def set_state(t, state):
 
 
 def edit_task(t, tasks, changes):
+    q = None
     for kv in changes:
         k, _, v = kv.partition("=")
         v = " ".join(v.split())
@@ -140,6 +152,10 @@ def edit_task(t, tasks, changes):
             for x in tasks:   # the repo belongs to the project heading, so every task of the project moves with it
                 if x["project"] == t["project"]:
                     x["repo"] = v
+        elif k == "q" and v:
+            q = v.replace("→", "->")
+        elif k == "a" and q:   # answer to the q= before it; "" removes the answer
+            t["answers"] = [x for x in t["answers"] if x["q"] != q] + ([{"q": q, "a": v}] if v else [])
         elif k == "pri" and v in ("", "high"):
             t["pri"] = v
         elif k == "review" and v in ("", "skip"):
@@ -261,14 +277,18 @@ PROMPT = """You review one short personal task note before it is worked on.
 
 Project: {project}
 Repo: {repo} (current folder){where}
-Task note: "{text}"
+Task note: "{text}"{answers}
+The note is often only a few words: use the repo to work out what it most likely means.
 
 Look at the code only as much as you need to (a few searches or file reads at most); do not change anything.
+Settle what the code can settle yourself: where the note points to one reasonable reading, take it and say so in the
+proposal as "Assuming …". Ask only about decisions the code can't settle (product or access choices, facts outside the
+repo), and never ask something your own title or proposal already answers.
 Reply with ONLY a JSON object, no prose around it:
-{{"clear": true or false (could a developer start without asking anything?),
- "questions": [at most 2 short questions, only if not clear],
+{{"clear": true or false (true unless a question below must be answered before work can start),
+ "questions": [at most 2 short questions for decisions only the owner can make; [] if none],
  "title": "the task restated as one clear imperative line",
- "proposal": "3 to 5 short lines: where in the code, the approach, the main risk",
+ "proposal": "3 to 5 short lines: where in the code, the approach (with any assumptions), the main risk",
  "files": [up to 4 repo-relative paths that matter],
  "size": "S" (hours) or "M" (a day or two) or "L" (more),
  "needs_gpu": true or false (does doing or testing it need a GPU server?)}}"""
@@ -287,7 +307,10 @@ def review_one(t):
     if "/" in repo and not (WORKSPACE / repo / ".git").exists():   # a folder inside a repo, e.g. keystone/pdf_adapter
         sub = repo
     cwd = WORKSPACE / repo if repo and (WORKSPACE / repo).exists() else WORKSPACE
+    ans = "".join(f"\n- {x['q']} → " + ("(owner: your call; pick a sensible default and state it as an assumption)"
+                                        if x["a"] == YOUR_CALL else x["a"]) for x in t.get("answers", []))
     prompt = PROMPT.format(project=t["project"], repo=repo or "none (whole workspace)", text=t["text"],
+                           answers="\nThe owner's answers to earlier review questions (decisions; build on them, don't ask again):" + ans if ans else "",
                            where=f"\nFocus on the folder {sub}." if sub else "")
     env = dict(os.environ, ROOM_CONFIG="/nonexistent")   # keep review runs out of the room
     started = time.time()
@@ -334,6 +357,8 @@ def send(task_id):
         raise SystemExit("task not found, or it has no repo")
     rv = load_reviews().get(task_id, {})
     body = f"Task from the board ({t['project']}): {rv.get('title') or t['text']}"
+    if t["answers"]:
+        body += "\nDecided: " + "; ".join(f"{x['q']} → {x['a']}" for x in t["answers"])
     if rv.get("proposal"):
         body += "\nProposal: " + rv["proposal"]
     repo = t["repo"].split("/")[0] if not (WORKSPACE / t["repo"] / ".git").exists() else t["repo"]
@@ -374,6 +399,9 @@ def main():
         set_state(t, a[1]) if cmd == "set" else edit_task(t, tasks, a[1:])
         write_tasks(tasks)
         collect()
+        if cmd == "edit" and any(x.startswith("a=") for x in a[1:]):   # an answered question: review again with it
+            subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "review", t["id"]], start_new_session=True,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     elif cmd == "send":
         send(a[0])
     elif cmd == "review":
