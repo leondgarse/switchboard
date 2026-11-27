@@ -68,6 +68,10 @@ Session data comes from [cc-menubar](../cc-menubar), which already polls every h
 Mac Studio. Each host gets the `room` CLI (`~/.local/bin/room`) and five hooks in `~/.claude/settings.json`. Nothing
 controls a session; sessions only post and receive.
 
+For two sessions on the same machine, Claude Code's own messaging (SendMessage) is direct and wakes the recipient, so
+the session-start hint tells sessions to prefer it there. The room is for other hosts, links, `repo:`/`host:`/`all`,
+and threads others should be able to read.
+
 - **Zero tokens when quiet.** Hooks print nothing unless there's a message. Each session gets one hint line at start,
   plus one line per link it belongs to.
 - **Delivery:** at the next prompt (`UserPromptSubmit`), mid-turn after a tool call (`PostToolUse`, at most every

@@ -279,8 +279,10 @@ def hook(event):
             register(sid, session_name(sid), cwd)
             repo = repo_id(git_top(cwd))
             links = [l for l in api("GET", "/links") if any(m["member"] in ("s:" + sid, "r:" + repo) for m in l["members"])]
-            text = [f"[room] Other Claude sessions (all hosts) can be messaged with `{ROOM}`; run `{ROOM} help` only when you need to. "
-                    f"If the user wants this session reachable while idle, keep `{ROOM} listen` running in the background."]
+            text = [f"[room] To message a session on this machine (@{host_label()} in `{ROOM} who`), use Claude Code's own "
+                    f"messaging (SendMessage) if you have it. Use `{ROOM}` for other hosts, links, repo:/host:/all, or a thread "
+                    f"others should see; run `{ROOM} help` only when you need to. If the user wants this session reachable "
+                    f"while idle, keep `{ROOM} listen` running in the background."]
             for l in links:
                 text.append(f"[room] This session is in link `{l['name']}`: {l['purpose']}. Tell it (`{ROOM} send link:{l['name']} \"…\"`) "
                             "when you change something its members rely on.")
@@ -578,7 +580,8 @@ def cmd_serve(a):
 # which is written by hand because it is also read by Claude sessions as instructions.
 SECTIONS = [
     ("msg", "Messaging", "for sessions: use it only when another session needs to know or answer something",
-     "Keep messages short and concrete. Don't poll. Don't end a turn saying you are waiting for an answer unless "
+     "Same machine: prefer Claude Code's own messaging (SendMessage) when you have it; room is for other hosts, "
+     "links and broadcasts. Keep messages short and concrete. Don't poll. Don't end a turn saying you are waiting for an answer unless "
      "`room wait` is running in the background; an idle session gets messages only at its next prompt."),
     ("update", "Update", "any session may run it when told a new room is out", ""),
     ("setup", "Set up this machine", "once, by a person", ""),
