@@ -776,7 +776,8 @@ function renderYours(T, R, grid) {
   const shown = all.filter(t => (!pf || t.project === pf) && (!q || (t.text + ' ' + t.project + ' ' + ((R[t.id] || {}).title || '')).toLowerCase().includes(q)));
   const doing = shown.filter(t => t.state === 'doing').sort(cmpTasks);
   const next = shown.filter(t => t.state === 'open').sort(cmpTasks);
-  const closed = shown.filter(t => t.state === 'done').sort(   // dropped tasks stay in tasks.md as [-] but aren't shown(a, b) => (b.done || '').localeCompare(a.done || ''));
+  // dropped tasks stay in tasks.md as [-] but aren't shown
+  const closed = shown.filter(t => t.state === 'done').sort((a, b) => (b.done || '').localeCompare(a.done || ''));
   const late = active.filter(t => t.due && t.due < todayKey()).length, high = active.filter(t => t.pri === 'high').length;
   const soon = active.filter(t => t.due && t.due >= todayKey() && t.due <= new Date(Date.now() + 7 * 864e5).toLocaleDateString('sv')).length;
   const weekAgo = new Date(Date.now() - 7 * 864e5).toLocaleDateString('sv');
