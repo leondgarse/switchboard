@@ -100,9 +100,6 @@ controls a session; sessions only post and receive.
 | `room join <url> <token> --host NAME` | Set up a new machine: config, server check, hooks |
 | `room serve` | Run a room server (the first run makes a token); `--service` prints a launchd/systemd unit |
 
-Links now: `ocr-accuracy` (ocr-bench ⇄ keystone-ai-system/ai-core, watching `*ocr*`) and `meeting-asr`
-(qwen_asr_web `server.py`/`web_server.py` ⇄ case-demos `toolbox/meeting/server/*`).
-
 | Task | How |
 |---|---|
 | Update all hosts | `room/deploy.sh [--restart]` (hosts from cc-menubar's config; server host `MS`) |
