@@ -32,7 +32,7 @@ the room.
 | `room send <to> "msg"` | `<to>` is `name@host` as `who` prints it, an id prefix, `link:NAME`, `repo:REPO`, `host:NAME` or `all` |
 | `room send <to> "msg" --ask` | A question: the recipient's turn keeps going until it answers |
 | `room send <to> --re <id> "msg"` | Answer message `#id` |
-| `room wait <id>` | Block until `#id` is answered. Run in the background, it wakes the session when the answer arrives |
+| `room wait <id>` | Block until `#id` is answered. Run in the background, it wakes the session when the answer arrives. Both sides run it after each reply while a topic goes on, so the exchange carries on until it is done |
 | `room listen` | Keep an idle session reachable: run in the background, it ends (and wakes the session) when an ask or reply arrives. No tokens while waiting |
 | `room inbox [--peek]` | Your unread messages. `--session name@host` peeks at another session's |
 | `room thread [LINK]` | Recent messages, all or one link's |

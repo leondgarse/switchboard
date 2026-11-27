@@ -164,6 +164,12 @@ def fmt_messages(msgs, sid, header=True):
         to = a["sender"] if a["sender"].startswith("human:") else a["sender"][:8]
         lines.append(f'Answer with: {ROOM} send {to} --re {a["id"]} "<short answer>"'
                      " (if you can't answer now, say when you will).")
+    else:
+        rs = [m for m in msgs if m["kind"] == "reply" and not m["sender"].startswith("human:")]
+        if rs:
+            r = rs[-1]
+            lines.append(f'Only if the topic needs more: {ROOM} send {r["sender"][:8]} --re {r["id"]} "…" '
+                         "(the other side waits for it). If it is done, don't reply.")
     return "\n".join(lines)
 
 
@@ -356,6 +362,9 @@ def cmd_send(a):
     if not re_:
         print(f"if you need the answer: run `{ROOM} wait {r['id']}` as a background command now. It ends when the answer "
               "arrives and wakes this session even if it is idle; without it, you only see the answer at your next prompt.")
+    else:
+        print(f"if the topic may go on: run `{ROOM} wait {r['id']}` as a background command now, so a follow-up wakes this "
+              "session even if it is idle. Skip it when the topic is done.")
 
 
 def find_session(who):
@@ -630,7 +639,8 @@ COMMANDS = [   # (section, path, usage, help, add_arguments, func); usage shows 
      "host:NAME | all", _send, cmd_send),
     ("msg", None, 'send <to> --re <id> "msg"', "answer message #id", None, None),
     ("msg", ("wait",), "wait <id> [--timeout 1800]", "block until #id is answered. Run it as a background command whenever "
-     "you need an answer: it wakes this session when the answer arrives, even if idle", _wait, cmd_wait),
+     "you need an answer, or after a reply while the topic may go on: it wakes this session when the answer or "
+     "follow-up arrives, even if idle", _wait, cmd_wait),
     ("msg", ("listen",), "listen [--all]", "stay reachable while idle (only when the user asks): run it as a background "
      "command; it ends when an ask or reply arrives (--all: any message), which wakes this session, and costs nothing "
      "until then. Restart it after handling the message",
