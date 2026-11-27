@@ -6,7 +6,7 @@ there is something to deliver, and never fail the session.
 Config: ~/.config/switchboard/room.json {"url": "http://<server>:8766", "token": "...", "host": "<label>"}
 (`room join <url> <token> [--host NAME]` writes it and installs the hooks). Python 3.9+, stdlib only.
 """
-__version__ = "0.1.7"
+__version__ = "0.1.8"
 
 import glob, json, os, re, socket, subprocess, sys, time, urllib.error, urllib.request
 from pathlib import Path
