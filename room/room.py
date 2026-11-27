@@ -273,7 +273,8 @@ def hook(event):
             register(sid, session_name(sid), cwd)
             repo = repo_id(git_top(cwd))
             links = [l for l in api("GET", "/links") if any(m["member"] in ("s:" + sid, "r:" + repo) for m in l["members"])]
-            text = [f"[room] Other Claude sessions (all hosts) can be messaged with `{ROOM}`; run `{ROOM} help` only when you need to."]
+            text = [f"[room] Other Claude sessions (all hosts) can be messaged with `{ROOM}`; run `{ROOM} help` only when you need to. "
+                    f"If the user wants this session reachable while idle, keep `{ROOM} listen` running in the background."]
             for l in links:
                 text.append(f"[room] This session is in link `{l['name']}`: {l['purpose']}. Tell it (`{ROOM} send link:{l['name']} \"…\"`) "
                             "when you change something its members rely on.")
@@ -365,6 +366,41 @@ def cmd_wait(a):
             return
     print(f"no answer to #{a.id} after {int(timeout)}s")
     sys.exit(1)
+
+
+def cmd_listen(a):
+    """Block until a message arrives for this session, print it, exit. Run in the background, the exit wakes an idle
+    session. Never exits without a message (any exit would cost the session a turn): long-polls and retries forever."""
+    sid, name, cwd = me()
+    CACHE.mkdir(parents=True, exist_ok=True)
+    pidf = CACHE / f"listen-{sid.replace(':', '_')}.pid"
+    try:
+        old = int(pidf.read_text())
+        os.kill(old, 0)
+        if old != os.getpid():
+            return print(f"already listening for this session (pid {old}); nothing to do.")
+    except (OSError, ValueError):
+        pass
+    pidf.write_text(str(os.getpid()))
+    kinds = "" if a.all else "&kinds=ask,reply"
+    try:
+        while True:
+            try:
+                rows = api("GET", f"/listen?session={sid}{kinds}&timeout=600", timeout=630)
+            except Exception:
+                time.sleep(15)   # server down or restarting: wait quietly, never exit
+                continue
+            if rows:
+                print(fmt_messages(rows, sid))
+                print(f"Handle it, then run `{ROOM} listen{' --all' if a.all else ''}` as a background command again "
+                      "to stay reachable.")
+                return
+    finally:
+        try:
+            if int(pidf.read_text()) == os.getpid():
+                pidf.unlink()
+        except (OSError, ValueError):
+            pass
 
 
 def cmd_status(a):
@@ -565,6 +601,11 @@ COMMANDS = [   # (section, path, usage, help, add_arguments, func); usage shows 
     ("msg", None, 'send <to> --re <id> "msg"', "answer message #id", None, None),
     ("msg", ("wait",), "wait <id> [--timeout 1800]", "block until #id is answered. Run it as a background command whenever "
      "you need an answer: it wakes this session when the answer arrives, even if idle", _wait, cmd_wait),
+    ("msg", ("listen",), "listen [--all]", "stay reachable while idle (only when the user asks): run it as a background "
+     "command; it ends when an ask or reply arrives (--all: any message), which wakes this session, and costs nothing "
+     "until then. Restart it after handling the message",
+     lambda p: p.add_argument("--all", action="store_true", help="wake for every message, not only asks and replies"),
+     cmd_listen),
     ("msg", ("inbox",), "inbox [--peek]", 'unread messages (they also arrive on their own as "[room]" context)',
      lambda p: p.add_argument("--peek", action="store_true", help="show without marking read"), cmd_inbox),
     ("msg", ("status",), 'status "now: …"', "one line on what this session is doing, shown to others",

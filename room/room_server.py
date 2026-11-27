@@ -229,6 +229,19 @@ class Handler(BaseHTTPRequestHandler):
                     if qs.get("session"):
                         R.seen(qs["session"])
                     return self.reply(200, R.inbox(qs["session"], qs.get("mark", "1") == "1", kinds))
+                if u.path == "/listen":   # long-poll for any new message (of some kinds) for a session
+                    sid = qs["session"]
+                    kinds = qs["kinds"].split(",") if qs.get("kinds") else None
+                    deadline = time.time() + min(float(qs.get("timeout", 600)), 3600)
+                    while True:
+                        R.seen(sid)   # a listening session counts as live, not gone quiet
+                        rows = R.inbox(sid, True, kinds)
+                        if rows:
+                            return self.reply(200, rows)
+                        left = deadline - time.time()
+                        if left <= 0:
+                            return self.reply(200, [])
+                        R.cond.wait(min(left, 30))
                 if u.path == "/wait":   # long-poll for replies to a message
                     mid, sid = int(qs["id"]), qs["session"]
                     deadline = time.time() + min(float(qs.get("timeout", 600)), 3600)

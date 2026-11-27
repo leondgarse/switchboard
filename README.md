@@ -72,7 +72,8 @@ controls a session; sessions only post and receive.
   plus one line per link it belongs to.
 - **Delivery:** at the next prompt (`UserPromptSubmit`), mid-turn after a tool call (`PostToolUse`, at most every
   15 s), and when a turn ends (`Stop`). An `ask` or a `reply` keeps the turn going so it gets handled. An idle session
-  only reads messages when you next use it, so cc-menubar shows ✉N and sends a notification.
+  only reads messages when you next use it, so cc-menubar shows ✉N and sends a notification, unless it runs
+  `room listen` in the background: that ends when an ask or reply arrives and wakes the session (no tokens until then).
 - **Links** group sessions or whole repos on one topic. Joining as a repo covers every future session there. A repo
   member's `--watch` globs (repo-relative) post an automatic "[auto] X edited <file>" notice to the link, at most
   once per file per 30 min.
