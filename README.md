@@ -87,6 +87,8 @@ Links now: `ocr-accuracy` (ocr-bench ⇄ keystone-ai-system/ai-core, watching `*
 | Task | How |
 |---|---|
 | Update all hosts | `room/deploy.sh [--restart]` (hosts from cc-menubar's config; server host `MS`) |
+| Someone else joins (any host on the LAN) | `pipx install switchboard-room && room join http://<MS-IP>:8766 <token> --host <name>` (see `room/README.md`) |
+| Release to PyPI | Bump `__version__` in `room/room.py`, then `git tag v<version> && git push origin v<version>`; `.github/workflows/publish.yml` publishes with trusted publishing |
 | Server on MS | cron runs `ensure-server.sh` (from `room/`, deployed to `~/.local/share/switchboard/`) every 5 min and at boot. Data in `~/.local/share/switchboard/room.db` |
 | Config on each host | `~/.config/switchboard/room.json` `{url, token, host}` (mode 600). The server address is MS's LAN IP |
 | Remove hooks | Restore `~/.claude/settings.json.bak-switchboard`, or delete the `room hook` entries |

@@ -4,8 +4,10 @@
 Run `room help` for the commands. Hooks call `room hook <Event>`. They print nothing (no tokens) unless
 there is something to deliver, and never fail the session.
 Config: ~/.config/switchboard/room.json {"url": "http://<server>:8766", "token": "...", "host": "<label>"}
-Python 3.9+, stdlib only.
+(`room join <url> <token> [--host NAME]` writes it and installs the hooks). Python 3.9+, stdlib only.
 """
+__version__ = "0.1.0"
+
 import glob, json, os, re, socket, subprocess, sys, time, urllib.error, urllib.request
 from pathlib import Path
 
@@ -13,7 +15,19 @@ CFG_PATH = Path(os.environ.get("ROOM_CONFIG") or Path.home() / ".config" / "swit
 CACHE = Path.home() / ".cache" / "switchboard"
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 INBOX_EVERY = 15          # seconds between inbox checks from PostToolUse
-ROOM = "~/.local/bin/room"
+
+
+def _exe():
+    """This command's own path (pipx/uv tool, the deploy.sh symlink, or room.py itself), so hooks and hints call it."""
+    p = os.path.abspath(sys.argv[0]) if sys.argv and sys.argv[0] else ""
+    if not os.path.basename(p).startswith("room"):
+        import shutil
+        p = shutil.which("room") or str(Path.home() / ".local" / "bin" / "room")
+    return p
+
+
+EXE = _exe()
+ROOM = "~" + EXE[len(str(Path.home())):] if EXE.startswith(str(Path.home()) + os.sep) else EXE
 
 HELP = f"""room: message other Claude Code sessions (this machine or others). Use it only when another
 session needs to know or answer something.
@@ -28,6 +42,7 @@ session needs to know or answer something.
                                      links group sessions or whole repos on one topic; files matching
                                      --watch globs (repo-relative) auto-notify the link when edited
   {ROOM} thread [NAME]               recent messages (all, or one link)
+  {ROOM} join <url> <token> [--host NAME]   set up this machine: write the config and install the hooks
 Keep messages short and concrete. Don't poll. Don't end a turn saying you are waiting for an answer
 unless `room wait` is running in the background; an idle session gets messages only at its next prompt."""
 
@@ -354,7 +369,7 @@ def install_hooks():
         if not bak.exists():
             bak.write_text(path.read_text())
     hooks = settings.setdefault("hooks", {})
-    exe = str(Path.home() / ".local" / "bin" / "room")
+    exe = EXE
     for event, matcher in [("SessionStart", None), ("UserPromptSubmit", None), ("PostToolUse", "*"), ("Stop", None), ("SessionEnd", None)]:
         groups = hooks.setdefault(event, [])
         groups[:] = [g for g in groups if not any("room hook" in h.get("command", "") for h in g.get("hooks", []))]
@@ -367,6 +382,28 @@ def install_hooks():
     print(f"room hooks installed in {path}")
 
 
+def cmd_join(args):
+    """Write the config (mode 600), check the server answers, then install the hooks."""
+    host = opt(args, "--host")
+    if len(args) != 2:
+        raise RuntimeError("usage: room join <url> <token> [--host NAME]   e.g. room join http://10.0.0.5:8766 TOKEN --host my-laptop")
+    url, token = args
+    if not re.match(r"https?://", url):
+        url = "http://" + url
+    c = cfg()
+    c.update(url=url.rstrip("/"), token=token, host=host or c.get("host") or socket.gethostname().split(".")[0])
+    CFG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(CFG_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(json.dumps(c, indent=2) + "\n")
+    os.chmod(CFG_PATH, 0o600)
+    print(f"config written: {CFG_PATH} (host label: {c['host']})")
+    n = len(api("GET", "/sessions"))
+    print(f"server OK: {c['url']} ({n} sessions known)")
+    install_hooks()
+    print("done: new Claude Code sessions join the room. Try `room who`.")
+
+
 def main():
     args = sys.argv[1:]
     cmd = args.pop(0) if args else "help"
@@ -375,8 +412,10 @@ def main():
             return hook(args[0] if args else "")
         if cmd in ("help", "-h", "--help"):
             return print(HELP)
+        if cmd in ("version", "--version", "-V"):
+            return print(f"room {__version__}")
         fn = {"who": cmd_who, "send": cmd_send, "inbox": cmd_inbox, "wait": cmd_wait, "status": cmd_status,
-              "link": cmd_link, "thread": cmd_thread}.get(cmd)
+              "link": cmd_link, "thread": cmd_thread, "join": cmd_join}.get(cmd)
         if cmd == "install-hooks":
             return install_hooks()
         if not fn:
