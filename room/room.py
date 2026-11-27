@@ -338,6 +338,7 @@ def cmd_who(a):
         u = unread.get(s["id"], 0)
         print(f"{(s['name'] or s['id'][:8]) + '@' + s['host']:<34} {s['id'][:8]}  {s['repo'] or '-':<28} "
               f"{s.get('version') or '?':<6} {s['state']:<6} {ago(s['last_seen']):>4}{'  ✉' + str(u) if u else ''}"
+              f"{'  (' + ', '.join(s['polling']) + ')' if s.get('polling') else ''}"
               f"{'  [' + ', '.join(s['links']) + ']' if s['links'] else ''}{'  — ' + s['status'] if s['status'] else ''}")
     if not rows:
         print("(no sessions yet)")
@@ -355,10 +356,24 @@ def cmd_send(a):
               "arrives and wakes this session even if it is idle; without it, you only see the answer at your next prompt.")
 
 
+def find_session(who):
+    """A session as `who` shows it: name@host, name, or id prefix (most recently seen wins)."""
+    rows = api("GET", "/sessions")
+    for match in (lambda s: s["id"] == who, lambda s: f"{s['name']}@{s['host']}".lower() == who.lower(),
+                  lambda s: s["name"] == who, lambda s: len(who) >= 4 and s["id"].startswith(who)):
+        hit = [s for s in rows if match(s)]
+        if hit:
+            return hit[0]
+    raise RuntimeError(f"no session matches {who!r} (room who --all)")
+
+
 def cmd_inbox(a):
-    peek = a.peek
+    if a.session:   # someone else's unread messages: always a peek, so they still get them
+        s = find_session(a.session)
+        print(f"unread for {s['name'] or s['id'][:8]}@{s['host']} (peek, still unread for it):")
+        return print(fmt_messages(api("GET", f"/inbox?session={s['id']}&mark=0"), s["id"], header=False) or "none")
     sid, _, _ = me()
-    print(fmt_messages(api("GET", f"/inbox?session={sid}&mark={'0' if peek else '1'}"), sid) or "no unread messages")
+    print(fmt_messages(api("GET", f"/inbox?session={sid}&mark={'0' if a.peek else '1'}"), sid) or "no unread messages")
 
 
 def cmd_wait(a):
@@ -378,6 +393,10 @@ def cmd_listen(a):
     """Block until a message arrives for this session, print it, exit. Run in the background, the exit wakes an idle
     session. Never exits without a message (any exit would cost the session a turn): long-polls and retries forever."""
     sid, name, cwd = me()
+    try:
+        register(sid, name, cwd)   # so `who` and `inbox --session` know it by name even if it runs from a shell
+    except Exception:
+        pass
     CACHE.mkdir(parents=True, exist_ok=True)
     pidf = CACHE / f"listen-{sid.replace(':', '_')}.pid"
     try:
@@ -570,7 +589,7 @@ SECTIONS = [
 def _who(p):
     p.add_argument("--all", action="store_true", help="also sessions that exited more than a day ago")
     p.description = ("Columns: name@host, id, repo, room version of that machine's client (? = older than 0.1.4), "
-                     "state, last seen, unread, links, status.")
+                     "state, last seen, unread, (listen / wait #N while one is running), links, status.")
 
 
 def _send(p):
@@ -614,8 +633,11 @@ COMMANDS = [   # (section, path, usage, help, add_arguments, func); usage shows 
      "until then. Restart it after handling the message",
      lambda p: p.add_argument("--all", action="store_true", help="wake for every message, not only asks and replies"),
      cmd_listen),
-    ("msg", ("inbox",), "inbox [--peek]", 'unread messages (they also arrive on their own as "[room]" context)',
-     lambda p: p.add_argument("--peek", action="store_true", help="show without marking read"), cmd_inbox),
+    ("msg", ("inbox",), "inbox [--peek] [--session S]", 'unread messages (they also arrive on their own as "[room]" '
+     "context); --session: another session's, read-only",
+     lambda p: (p.add_argument("--peek", action="store_true", help="show without marking read"),
+                p.add_argument("--session", metavar="S", help="name@host, name or id prefix of another session; "
+                               "always a peek")), cmd_inbox),
     ("msg", ("status",), 'status "now: …"', "one line on what this session is doing, shown to others",
      lambda p: p.add_argument("text", nargs="*", help="the status line"), cmd_status),
     ("msg", ("link", "list"), "link [list]", "links: what they are for, members, watched files", lambda p: None, cmd_link_list),

@@ -9,7 +9,7 @@ own: sessions (through their hooks and the `room` CLI) post and fetch. No agent 
 Every request needs `Authorization: Bearer <token>`; the token is read from $ROOM_TOKEN or
 ~/.config/switchboard/room.json ("token"). Python 3.9+, stdlib only.
 """
-import argparse, fnmatch, hmac, json, os, re, sqlite3, threading, time
+import argparse, fnmatch, hmac, json, os, re, select, socket, sqlite3, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -44,6 +44,7 @@ class Room:
             self.db.execute("ALTER TABLE sessions ADD COLUMN version TEXT DEFAULT ''")
         self.lock = threading.Lock()
         self.cond = threading.Condition(self.lock)   # wakes /wait long-polls when a message arrives
+        self.polls = {}   # in memory: id(handler) -> (session, "listen" | "wait #N"), while a long-poll is open
 
     def q(self, sql, *args):
         return [dict(r) for r in self.db.execute(sql, args).fetchall()]
@@ -66,6 +67,7 @@ class Room:
         out = self.q("SELECT * FROM sessions ORDER BY last_seen DESC")
         for s in out:
             s["state"] = "exited" if s["ended"] else ("live" if now - s["last_seen"] < LIVE_FOR else "quiet")
+            s["polling"] = sorted({what for sid, what in self.polls.values() if sid == s["id"]})
             s["links"] = [m["link"] for m in self.q(
                 "SELECT link FROM members WHERE member=? OR member=?", "s:" + s["id"], "r:" + (s["repo"] or "-"))]
         return out
@@ -197,6 +199,31 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def client_gone(self):
+        """True once the client of this long-poll has closed its connection (its process was stopped)."""
+        try:
+            if select.select([self.connection], [], [], 0)[0]:
+                return self.connection.recv(1, socket.MSG_PEEK) == b""
+        except OSError:
+            return True
+        return False
+
+    def long_poll(self, R, sid, what, fetch, timeout):
+        """Hold the request until fetch() returns rows or the timeout passes; listed in `who` while open."""
+        deadline = time.time() + min(float(timeout), 3600)
+        R.polls[id(self)] = (sid, what)
+        try:
+            while True:
+                rows = fetch()
+                if rows:
+                    return self.reply(200, rows)
+                left = deadline - time.time()
+                if left <= 0 or self.client_gone():
+                    return self.reply(200, [])
+                R.cond.wait(min(left, 10))
+        finally:
+            R.polls.pop(id(self), None)
+
     def authed(self):
         if hmac.compare_digest(self.headers.get("Authorization", "").encode(), ("Bearer " + self.token).encode()):
             return True
@@ -234,31 +261,23 @@ class Handler(BaseHTTPRequestHandler):
                 if u.path == "/listen":   # long-poll for any new message (of some kinds) for a session
                     sid = qs["session"]
                     kinds = qs["kinds"].split(",") if qs.get("kinds") else None
-                    deadline = time.time() + min(float(qs.get("timeout", 600)), 3600)
-                    while True:
+
+                    def fetch():
                         R.seen(sid)   # a listening session counts as live, not gone quiet
-                        rows = R.inbox(sid, True, kinds)
-                        if rows:
-                            return self.reply(200, rows)
-                        left = deadline - time.time()
-                        if left <= 0:
-                            return self.reply(200, [])
-                        R.cond.wait(min(left, 30))
+                        return R.inbox(sid, True, kinds)
+                    return self.long_poll(R, sid, "listen" if kinds else "listen --all", fetch, qs.get("timeout", 600))
                 if u.path == "/wait":   # long-poll for replies to a message
                     mid, sid = int(qs["id"]), qs["session"]
-                    deadline = time.time() + min(float(qs.get("timeout", 600)), 3600)
-                    while True:
+
+                    def fetch():
                         rows = R.q("""SELECT m.*, s.name AS sender_name, s.host AS sender_host FROM messages m
                                       JOIN deliveries d ON d.msg=m.id AND d.session=? AND d.read IS NULL
                                       LEFT JOIN sessions s ON s.id=m.sender WHERE m.reply_to=? ORDER BY m.id""", sid, mid)
                         if rows:
                             R.db.executemany("UPDATE deliveries SET read=? WHERE msg=? AND session=?",
                                              [(time.time(), r["id"], sid) for r in rows])
-                            return self.reply(200, rows)
-                        left = deadline - time.time()
-                        if left <= 0:
-                            return self.reply(200, [])
-                        R.cond.wait(min(left, 30))
+                        return rows
+                    return self.long_poll(R, sid, f"wait #{mid}", fetch, qs.get("timeout", 600))
             self.reply(404, {"error": "not found"})
         except (KeyError, ValueError) as e:
             self.reply(400, {"error": str(e)})
