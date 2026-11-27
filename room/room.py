@@ -31,60 +31,6 @@ def _exe():
 EXE = _exe()
 ROOM = "~" + EXE[len(str(Path.home())):] if EXE.startswith(str(Path.home()) + os.sep) else EXE
 
-HELP_SECTIONS = [
-    ("Messaging", "for sessions: use it only when another session needs to know or answer something", [
-        ("who", "sessions (live/exited), what they do, their links"),
-        ('send <to> "msg" [--ask]', "to = name@host (as in `who`) | id prefix | link:NAME | repo:REPO | host:NAME | all"),
-        ('send <to> --re <id> "msg"', "answer message #id"),
-        ("wait <id> [--timeout 1800]", "block until #id is answered. Run it as a background command whenever you need an "
-                                       "answer: it wakes this session when the answer arrives, even if idle"),
-        ("inbox [--peek]", 'unread messages (they also arrive on their own as "[room]" context)'),
-        ('status "now: …"', "one line on what this session is doing, shown to others"),
-        ('link list | create NAME "purpose"', "links group sessions or whole repos on one topic"),
-        ("link join NAME [--repo [REPO]] [--watch GLOB]…", "files matching --watch globs (repo-relative) auto-notify the link when edited"),
-        ("link leave NAME [--repo [REPO]]", "leave a link (as this session, or for the whole repo)"),
-        ("thread [NAME]", "recent messages (all, or one link)"),
-    ], "Keep messages short and concrete. Don't poll. Don't end a turn saying you are waiting for an answer unless "
-       "`room wait` is running in the background; an idle session gets messages only at its next prompt."),
-    ("Update", "any session may run it when told a new room is out", [
-        ("update", "upgrade room on this machine (pipx, uv tool or pip, whichever installed it)"),
-        ("--version", "the installed version"),
-    ], ""),
-    ("Set up this machine", "once, by a person", [
-        ("join <url> <token> [--host NAME]", "write the config, check the server, install the hooks"),
-        ("install-hooks", "(re)install only the hooks in ~/.claude/settings.json"),
-    ], ""),
-    ("Run a room server", "on one machine, by a person", [
-        ("serve [--port 8766]", "serve a room here; the first run makes a token and prints the join line"),
-        ("serve --service", "print a launchd/systemd unit that keeps it running"),
-    ], ""),
-]
-
-
-def help_text(color=None):
-    """Grouped help. Colors only for a person at a terminal (sessions read it too), and never with NO_COLOR."""
-    import shutil, textwrap
-    if color is None:
-        color = sys.stdout.isatty() and not os.environ.get("NO_COLOR") and os.environ.get("TERM") != "dumb"
-    c = (lambda code, t: f"\033[{code}m{t}\033[0m") if color else (lambda code, t: t)
-    width = min(shutil.get_terminal_size((100, 24)).columns, 120)
-    col = max(len(u) for _, _, cmds, _ in HELP_SECTIONS for u, _ in cmds if len(u) <= 34) + 4
-    out = [f"{c('1', 'room')}: message other Claude Code sessions (this machine or others). Command: {ROOM}"]
-    for title, who, cmds, note in HELP_SECTIONS:
-        out += ["", f"{c('1;34', title.upper())}  {c('2', '(' + who + ')')}"]
-        for usage, desc in cmds:
-            lines = textwrap.wrap(desc, max(30, width - col - 2)) or [""]
-            if len(usage) + 2 > col:   # long usage: description goes on the next line
-                out.append("  " + c("32", usage))
-                out += [" " * (col + 2) + l for l in lines if l]
-            else:
-                out.append("  " + c("32", usage) + " " * (col - len(usage)) + lines[0])
-                out += [" " * (col + 2) + l for l in lines[1:]]
-        if note:
-            out += ["  " + c("2", l) for l in textwrap.wrap(note, width - 4)]
-    return "\n".join(l.rstrip() for l in out)
-
-
 def cfg():
     try:
         return json.loads(CFG_PATH.read_text())
@@ -284,7 +230,7 @@ def update_cmd():
     raise RuntimeError(f"can't tell how room was installed ({sys.prefix}); upgrade {PKG} with the tool you used")
 
 
-def cmd_update(args):
+def cmd_update(a):
     if deployed():
         return print("room here is a copy from switchboard's deploy.sh: it is updated by running room/deploy.sh on the "
                      "machine with the switchboard repo, not from PyPI.")
@@ -375,23 +321,8 @@ def hook(event):
 
 
 # ---- commands -------------------------------------------------------------------------------------------
-def opt(args, name, default=None, flag=False):
-    if name not in args:
-        return default
-    i = args.index(name)
-    if flag:
-        args.pop(i)
-        return True
-    if i + 1 < len(args) and not args[i + 1].startswith("--"):
-        v = args[i + 1]
-        del args[i:i + 2]
-        return v
-    args.pop(i)
-    return ""   # flag given without value
-
-
-def cmd_who(args):
-    show_all = opt(args, "--all", flag=True)
+def cmd_who(a):
+    show_all = a.all
     unread = api("GET", "/unread")
     rows = [s for s in api("GET", "/sessions") if show_all or s["state"] != "exited" or s["last_seen"] > time.time() - 86400]
     for s in rows:
@@ -405,81 +336,73 @@ def cmd_who(args):
         print("(no sessions yet)")
 
 
-def cmd_send(args):
-    ask = opt(args, "--ask", flag=True)
-    re_ = opt(args, "--re")
-    if len(args) < 2:
-        raise RuntimeError('usage: room send <to> "message" [--ask] [--re ID]')
+def cmd_send(a):
+    re_ = a.re
     sid, name, cwd = me()
     register(sid, name, cwd)
-    r = api("POST", "/send", {"session": sid, "to": args[0], "body": " ".join(args[1:]),
-                              "kind": "reply" if re_ else ("ask" if ask else "notify"), "reply_to": int(re_) if re_ else None})
+    r = api("POST", "/send", {"session": sid, "to": a.to, "body": " ".join(a.msg),
+                              "kind": "reply" if re_ else ("ask" if a.ask else "notify"), "reply_to": re_})
     print(f"sent #{r['id']} to {len(r['recipients'])} session(s)")
     if not re_:
         print(f"if you need the answer: run `{ROOM} wait {r['id']}` as a background command now. It ends when the answer "
               "arrives and wakes this session even if it is idle; without it, you only see the answer at your next prompt.")
 
 
-def cmd_inbox(args):
-    peek = opt(args, "--peek", flag=True)
+def cmd_inbox(a):
+    peek = a.peek
     sid, _, _ = me()
     print(fmt_messages(api("GET", f"/inbox?session={sid}&mark={'0' if peek else '1'}"), sid) or "no unread messages")
 
 
-def cmd_wait(args):
-    timeout = float(opt(args, "--timeout", "1800"))
+def cmd_wait(a):
+    timeout = a.timeout
     sid, _, _ = me()
     end = time.time() + timeout
     while time.time() < end:
-        rows = api("GET", f"/wait?id={int(args[0])}&session={sid}&timeout={min(600, end - time.time())}", timeout=620)
+        rows = api("GET", f"/wait?id={a.id}&session={sid}&timeout={min(600, end - time.time())}", timeout=620)
         if rows:
             print(fmt_messages(rows, sid))
             return
-    print(f"no answer to #{args[0]} after {int(timeout)}s")
+    print(f"no answer to #{a.id} after {int(timeout)}s")
     sys.exit(1)
 
 
-def cmd_status(args):
+def cmd_status(a):
     sid, name, cwd = me()
-    register(sid, name, cwd, status=" ".join(args))
+    register(sid, name, cwd, status=" ".join(a.text))
     print("status set")
 
 
-def cmd_link(args):
-    op = args.pop(0) if args else "list"
-    if op == "list":
-        for l in api("GET", "/links"):
-            print(f"{l['name']}: {l['purpose']}")
-            for m in l["members"]:
-                print(f"    {m['member']}{'  watch ' + ' '.join(m['watch']) if m['watch'] else ''}")
-            print(f"    live sessions now: {len(l['sessions'])}")
-        return
-    if not args:
-        raise RuntimeError("usage: room link create|join|leave|delete NAME …")
-    name = args.pop(0)
+def cmd_link_list(a):
+    for l in api("GET", "/links"):
+        print(f"{l['name']}: {l['purpose']}")
+        for m in l["members"]:
+            print(f"    {m['member']}{'  watch ' + ' '.join(m['watch']) if m['watch'] else ''}")
+        print(f"    live sessions now: {len(l['sessions'])}")
+
+
+def cmd_link_create(a):
     sid, sname, cwd = me()
     register(sid, sname, cwd)
-    if op == "create":
-        api("POST", "/link", {"op": "create", "name": name, "purpose": " ".join(args), "session": sid})
-        print(f"link {name} created; join it with: {ROOM} link join {name} [--repo] [--watch 'glob']")
-        return
-    repo = opt(args, "--repo")
-    watch = []
-    while "--watch" in args:
-        watch.append(opt(args, "--watch"))
-    if repo is not None:
-        member = "r:" + (repo or repo_id(git_top(cwd or os.getcwd())))
+    api("POST", "/link", {"op": "create", "name": a.name, "purpose": " ".join(a.purpose), "session": sid})
+    print(f"link {a.name} created; join it with: {ROOM} link join {a.name} [--repo] [--watch 'glob']")
+
+
+def cmd_link_member(a):
+    """join / leave / delete: as this session, or with --repo [REPO] for a whole repo."""
+    sid, sname, cwd = me()
+    register(sid, sname, cwd)
+    if a.repo is not None:
+        member = "r:" + (a.repo or repo_id(git_top(cwd or os.getcwd())))
     else:
         member = "s:" + sid
-    if op in ("join", "leave", "delete"):
-        api("POST", "/link", {"op": op, "name": name, "member": member, "watch": [w for w in watch if w]})
-        print(f"{op} {name}: {member}{'  watch ' + ' '.join(watch) if watch else ''}")
-    else:
-        raise RuntimeError(f"unknown link command {op!r}")
+    watch = [w for w in (getattr(a, "watch", None) or []) if w]
+    api("POST", "/link", {"op": a.op, "name": a.name, "member": member, "watch": watch})
+    print(f"{a.op} {a.name}: {member}{'  watch ' + ' '.join(watch) if watch else ''}")
 
 
-def cmd_thread(args):
-    q = f"?link={args[0]}" if args else ""
+def cmd_thread(a):
+    q = f"?link={a.name}" if a.name else ""
     for m in reversed(api("GET", "/thread" + q)):
         print(f"#{m['id']} {ago(m['ts'])} {m['kind']} {who_str(m)} → {m['to_spec']}{' re #' + str(m['reply_to']) if m['reply_to'] else ''}: {m['body']}")
 
@@ -506,12 +429,9 @@ def install_hooks():
     print(f"room hooks installed in {path}")
 
 
-def cmd_join(args):
+def cmd_join(a):
     """Write the config (mode 600), check the server answers, then install the hooks."""
-    host = opt(args, "--host")
-    if len(args) != 2:
-        raise RuntimeError("usage: room join <url> <token> [--host NAME]   e.g. room join http://10.0.0.5:8766 TOKEN --host my-laptop")
-    url, token = args
+    host, url, token = a.host, a.url, a.token
     if not re.match(r"https?://", url):
         url = "http://" + url
     c = cfg()
@@ -566,9 +486,9 @@ WantedBy=default.target
 #   systemctl --user enable --now switchboard-room && loginctl enable-linger $USER"""
 
 
-def cmd_serve(args):
-    port = int(opt(args, "--port", "8766") or 8766)
-    if opt(args, "--service", flag=True):
+def cmd_serve(a):
+    port = a.port
+    if a.service:
         tpl = SERVICE_MAC if sys.platform == "darwin" else SERVICE_LINUX
         return print(tpl.format(exe=EXE, port=port, log=Path.home() / ".local" / "share" / "switchboard" / "server.log"))
     import room_server, secrets
@@ -588,30 +508,162 @@ def cmd_serve(args):
           "Anyone with the token can post into the Claude sessions in this room: share it only with people you trust, "
           "on a network you trust (plain HTTP). Ctrl-C stops the server.", flush=True)
     os.environ["ROOM_TOKEN"] = token
-    room_server.main(["--port", str(port)] + args)
+    room_server.main(["--port", str(port), "--host", a.bind] + (["--db", a.db] if a.db else []))
+
+
+# ---- command line -----------------------------------------------------------------------------------------
+# One table: each row is a command's usage, its help, which section of `room help` it is in, and its arguments.
+# It builds both the argparse parser (so `room <command> -h` and argument errors work) and the grouped overview,
+# which is written by hand because it is also read by Claude sessions as instructions.
+SECTIONS = [
+    ("msg", "Messaging", "for sessions: use it only when another session needs to know or answer something",
+     "Keep messages short and concrete. Don't poll. Don't end a turn saying you are waiting for an answer unless "
+     "`room wait` is running in the background; an idle session gets messages only at its next prompt."),
+    ("update", "Update", "any session may run it when told a new room is out", ""),
+    ("setup", "Set up this machine", "once, by a person", ""),
+    ("server", "Run a room server", "on one machine, by a person", ""),
+]
+
+
+def _who(p):
+    p.add_argument("--all", action="store_true", help="also sessions that exited more than a day ago")
+
+
+def _send(p):
+    p.add_argument("to", help="name@host (as in `who`), id prefix, link:NAME, repo:REPO, host:NAME or all")
+    p.add_argument("msg", nargs="+", help="the message (several words are joined)")
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("--ask", action="store_true", help="a question: the recipient's turn keeps going until it answers")
+    g.add_argument("--re", type=int, metavar="ID", help="answer message #ID")
+
+
+def _wait(p):
+    p.add_argument("id", type=int, help="the message id that `send` printed")
+    p.add_argument("--timeout", type=float, default=1800, metavar="SECONDS", help="give up after this long (default 1800)")
+
+
+def _link_member(p, watch):
+    p.add_argument("name", help="link name")
+    p.add_argument("--repo", nargs="?", const="", metavar="REPO",
+                   help="for every session of a repo (this one if REPO is left out), not just this session")
+    if watch:
+        p.add_argument("--watch", action="append", metavar="GLOB",
+                       help="repo-relative glob; edits to matching files notify the link (repeatable)")
+
+
+def _serve(p):
+    p.add_argument("--port", type=int, default=8766, help="default 8766")
+    p.add_argument("--bind", default="0.0.0.0", metavar="ADDR", help="address to listen on (default 0.0.0.0: the LAN)")
+    p.add_argument("--db", metavar="PATH", help="SQLite file (default ~/.local/share/switchboard/room.db)")
+    p.add_argument("--service", action="store_true", help="print a launchd/systemd unit that keeps it running, and exit")
+
+
+COMMANDS = [   # (section, path, usage, help, add_arguments, func); usage shows in `room help`, help in both
+    ("msg", ("who",), "who [--all]", "sessions (live/exited), what they do, their links", _who, cmd_who),
+    ("msg", ("send",), 'send <to> "msg" [--ask | --re <id>]', "to = name@host (as in `who`) | id prefix | link:NAME | repo:REPO | "
+     "host:NAME | all", _send, cmd_send),
+    ("msg", None, 'send <to> --re <id> "msg"', "answer message #id", None, None),
+    ("msg", ("wait",), "wait <id> [--timeout 1800]", "block until #id is answered. Run it as a background command whenever "
+     "you need an answer: it wakes this session when the answer arrives, even if idle", _wait, cmd_wait),
+    ("msg", ("inbox",), "inbox [--peek]", 'unread messages (they also arrive on their own as "[room]" context)',
+     lambda p: p.add_argument("--peek", action="store_true", help="show without marking read"), cmd_inbox),
+    ("msg", ("status",), 'status "now: …"', "one line on what this session is doing, shown to others",
+     lambda p: p.add_argument("text", nargs="*", help="the status line"), cmd_status),
+    ("msg", ("link", "list"), "link [list]", "links: what they are for, members, watched files", lambda p: None, cmd_link_list),
+    ("msg", ("link", "create"), 'link create NAME "purpose"', "start a link that groups sessions or whole repos on one topic",
+     lambda p: (p.add_argument("name"), p.add_argument("purpose", nargs="*")), cmd_link_create),
+    ("msg", ("link", "join"), "link join NAME [--repo [REPO]] [--watch GLOB]…",
+     "join as this session, or a whole repo; files matching --watch globs auto-notify the link when edited",
+     lambda p: _link_member(p, True), cmd_link_member),
+    ("msg", ("link", "leave"), "link leave NAME [--repo [REPO]]", "leave a link (as this session, or for the whole repo)",
+     lambda p: _link_member(p, False), cmd_link_member),
+    ("msg", ("link", "delete"), "link delete NAME", "delete a link", lambda p: _link_member(p, False), cmd_link_member),
+    ("msg", ("thread",), "thread [NAME]", "recent messages (all, or one link)",
+     lambda p: p.add_argument("name", nargs="?", help="a link name"), cmd_thread),
+    ("update", ("update",), "update", "upgrade room on this machine (pipx, uv tool or pip, whichever installed it)",
+     lambda p: None, cmd_update),
+    ("update", None, "--version", "the installed version", None, None),
+    ("setup", ("join",), "join <url> <token> [--host NAME]", "write the config, check the server, install the hooks",
+     lambda p: (p.add_argument("url", help="the room server, e.g. http://10.0.0.5:8766"), p.add_argument("token"),
+                p.add_argument("--host", metavar="NAME", help="this machine's label in `room who` (default: hostname)")),
+     cmd_join),
+    ("setup", ("install-hooks",), "install-hooks", "(re)install only the hooks in ~/.claude/settings.json",
+     lambda p: None, lambda a: install_hooks()),
+    ("server", ("serve",), "serve [--port 8766]", "serve a room here; the first run makes a token and prints the join line",
+     _serve, cmd_serve),
+    ("server", None, "serve --service", "print a launchd/systemd unit that keeps it running", None, None),
+]
+
+
+def help_text(color=None):
+    """Grouped overview. Colors only for a person at a terminal (sessions read it too), and never with NO_COLOR."""
+    import shutil, textwrap
+    if color is None:
+        color = sys.stdout.isatty() and not os.environ.get("NO_COLOR") and os.environ.get("TERM") != "dumb"
+    c = (lambda code, t: f"\033[{code}m{t}\033[0m") if color else (lambda code, t: t)
+    width = min(shutil.get_terminal_size((100, 24)).columns, 120)
+    col = max(len(u) for _, _, u, *_ in COMMANDS if len(u) <= 34) + 4
+    out = [f"{c('1', 'room')}: message other Claude Code sessions (this machine or others). Command: {ROOM}",
+           f"{c('2', 'room <command> -h shows one command in detail.')}"]
+    for key, title, who, note in SECTIONS:
+        out += ["", f"{c('1;34', title.upper())}  {c('2', '(' + who + ')')}"]
+        for _, _, usage, desc, *_ in (r for r in COMMANDS if r[0] == key):
+            lines = textwrap.wrap(desc, max(30, width - col - 2)) or [""]
+            if len(usage) + 2 > col:   # long usage: description goes on the next line
+                out.append("  " + c("32", usage))
+                out += [" " * (col + 2) + l for l in lines]
+            else:
+                out.append("  " + c("32", usage) + " " * (col - len(usage)) + lines[0])
+                out += [" " * (col + 2) + l for l in lines[1:]]
+        if note:
+            out += ["  " + c("2", l) for l in textwrap.wrap(note, width - 4)]
+    return "\n".join(l.rstrip() for l in out)
+
+
+def build_parser():
+    import argparse
+
+    class Parser(argparse.ArgumentParser):
+        def error(self, message):   # short and pointing at the help, instead of argparse's usage dump
+            more = f"room {self.prog[5:]} -h for details, " if len(self.prog) > 4 else ""
+            self.exit(2, f"room: {message}\n{self.format_usage().strip()}\n({more}room help for all commands)\n")
+
+    top = Parser(prog="room", add_help=False, usage="room <command> [options]")
+    sub = top.add_subparsers(dest="cmd", metavar="<command>", parser_class=Parser)
+    link_sub = None
+    for _, path, usage, desc, add_args, func in COMMANDS:
+        if not path:
+            continue
+        if path[0] == "link":
+            if link_sub is None:
+                lp = sub.add_parser("link", usage="room link {list,create,join,leave,delete} …",
+                                    description="Links group sessions or whole repos on one topic.")
+                lp.set_defaults(func=cmd_link_list, op="list")   # bare `room link` lists
+                link_sub = lp.add_subparsers(dest="op", metavar="{list,create,join,leave,delete}", parser_class=Parser)
+            p = link_sub.add_parser(path[1], usage="room " + usage, description=desc)
+        else:
+            p = sub.add_parser(path[0], usage="room " + usage, description=desc)
+        add_args(p)
+        p.set_defaults(func=func)
+    v = sub.add_parser("version")
+    v.set_defaults(func=lambda a: print(f"room {__version__}"))
+    return top
 
 
 def main():
     args = sys.argv[1:]
-    cmd = args.pop(0) if args else "help"
     try:
-        if cmd == "hook":
-            return hook(args[0] if args else "")
-        if cmd in ("help", "-h", "--help"):
-            return print(help_text())
-        if cmd in ("version", "--version", "-V"):
-            return print(f"room {__version__}")
-        if cmd == "_check-latest":
+        # hooks run on every tool call: no argparse on that path
+        if args[:1] == ["hook"]:
+            return hook(args[1] if len(args) > 1 else "")
+        if args[:1] == ["_check-latest"]:
             return check_latest()
-        fn = {"who": cmd_who, "send": cmd_send, "inbox": cmd_inbox, "wait": cmd_wait, "status": cmd_status,
-              "link": cmd_link, "thread": cmd_thread, "join": cmd_join, "update": cmd_update,
-              "serve": cmd_serve}.get(cmd)
-        if cmd == "install-hooks":
-            return install_hooks()
-        if not fn:
-            print(help_text())
-            sys.exit(2)
-        fn(args)
+        if not args or args[0] in ("help", "-h", "--help"):
+            return print(help_text())
+        if args[0] in ("--version", "-V"):
+            return print(f"room {__version__}")
+        a = build_parser().parse_args(args)
+        a.func(a)
     except (RuntimeError, OSError, urllib.error.URLError) as e:
         print(f"room: {e}", file=sys.stderr)
         sys.exit(1)
