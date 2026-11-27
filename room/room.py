@@ -6,7 +6,7 @@ there is something to deliver, and never fail the session.
 Config: ~/.config/switchboard/room.json {"url": "http://<server>:8766", "token": "...", "host": "<label>"}
 (`room join <url> <token> [--host NAME]` writes it and installs the hooks). Python 3.9+, stdlib only.
 """
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 import glob, json, os, re, socket, subprocess, sys, time, urllib.error, urllib.request
 from pathlib import Path
@@ -15,6 +15,8 @@ CFG_PATH = Path(os.environ.get("ROOM_CONFIG") or Path.home() / ".config" / "swit
 CACHE = Path.home() / ".cache" / "switchboard"
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 INBOX_EVERY = 15          # seconds between inbox checks from PostToolUse
+PKG = "switchboard-room"
+CHECK_EVERY = 12 * 3600   # seconds between PyPI checks for a newer room
 
 
 def _exe():
@@ -32,7 +34,7 @@ ROOM = "~" + EXE[len(str(Path.home())):] if EXE.startswith(str(Path.home()) + os
 HELP = f"""room: message other Claude Code sessions (this machine or others). Use it only when another
 session needs to know or answer something.
   {ROOM} who                         sessions (live/exited), what they do, their links
-  {ROOM} send <to> "msg" [--ask]     to = name@host (as in `who`) | id prefix | link:NAME | repo:REPO
+  {ROOM} send <to> "msg" [--ask]     to = name@host (as in `who`) | id prefix | link:NAME | repo:REPO | host:NAME | all
   {ROOM} send <to> --re <id> "msg"   answer message #id
   {ROOM} wait <id> [--timeout 1800]  block until #id is answered. Run it as a background command whenever you
                                      need an answer: it wakes this session when the answer arrives, even if idle
@@ -43,6 +45,7 @@ session needs to know or answer something.
                                      --watch globs (repo-relative) auto-notify the link when edited
   {ROOM} thread [NAME]               recent messages (all, or one link)
   {ROOM} join <url> <token> [--host NAME]   set up this machine: write the config and install the hooks
+  {ROOM} update                      upgrade room on this machine (pipx, uv tool or pip, whichever installed it)
 Keep messages short and concrete. Don't poll. Don't end a turn saying you are waiting for an answer
 unless `room wait` is running in the background; an idle session gets messages only at its next prompt."""
 
@@ -183,6 +186,86 @@ def fmt_messages(msgs, sid, header=True):
     return "\n".join(lines)
 
 
+# ---- versions and updates ---------------------------------------------------------------------------------
+def vtuple(v):
+    return tuple(int(x) for x in re.findall(r"\d+", v or "0")[:3])
+
+
+def deployed():
+    """Installed by switchboard's deploy.sh (a copy under ~/.local/share/switchboard), not from PyPI."""
+    return os.path.realpath(EXE).startswith(str(Path.home() / ".local" / "share" / "switchboard") + os.sep)
+
+
+def latest_cached():
+    try:
+        return json.loads((CACHE / "latest.json").read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def check_latest():
+    """Ask PyPI for the newest version; cached in ~/.cache/switchboard/latest.json. Runs detached from hooks."""
+    try:
+        with urllib.request.urlopen(f"https://pypi.org/pypi/{PKG}/json", timeout=10) as r:
+            v = json.loads(r.read())["info"]["version"]
+        CACHE.mkdir(parents=True, exist_ok=True)
+        (CACHE / "latest.json").write_text(json.dumps({"version": v, "ts": time.time()}))
+    except Exception:
+        CACHE.mkdir(parents=True, exist_ok=True)   # retry after CHECK_EVERY anyway; never in a session's way
+        (CACHE / "latest.json").write_text(json.dumps(dict(latest_cached(), ts=time.time())))
+
+
+def update_notice():
+    """One line for SessionStart when PyPI has a newer room: once per machine per version, so only one session acts."""
+    if deployed():
+        return ""
+    c = latest_cached()
+    if time.time() - c.get("ts", 0) > CHECK_EVERY:
+        subprocess.Popen([sys.executable, os.path.abspath(__file__), "_check-latest"], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    v = c.get("version")
+    if not v or vtuple(v) <= vtuple(__version__):
+        return ""
+    mark = CACHE / f"notified-{v}"
+    if mark.exists():
+        return ""
+    mark.touch()
+    return (f"[room] room {v} is out (this machine has {__version__}). Run `{ROOM} update` once now, then carry on; "
+            "other sessions on this machine are not told.")
+
+
+def update_cmd():
+    """The command that upgrades this install, as a list, or None for a deploy.sh copy."""
+    import shutil
+    pre = Path(sys.prefix)
+    if (pre / "pipx_metadata.json").exists() and shutil.which("pipx"):
+        return ["pipx", "upgrade", PKG]
+    if (pre / "uv-receipt.toml").exists() and shutil.which("uv"):
+        return ["uv", "tool", "upgrade", PKG]
+    if subprocess.run([sys.executable, "-m", "pip", "--version"], capture_output=True).returncode == 0:
+        return [sys.executable, "-m", "pip", "install", "-U", PKG]
+    if shutil.which("uv"):
+        return ["uv", "pip", "install", "-U", "--python", sys.executable, PKG]
+    raise RuntimeError(f"can't tell how room was installed ({sys.prefix}); upgrade {PKG} with the tool you used")
+
+
+def cmd_update(args):
+    if deployed():
+        return print("room here is a copy from switchboard's deploy.sh: it is updated by running room/deploy.sh on the "
+                     "machine with the switchboard repo, not from PyPI.")
+    import fcntl
+    CACHE.mkdir(parents=True, exist_ok=True)
+    with open(CACHE / "update.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)   # several sessions told at once: one upgrades, the rest find it done
+        cmd = update_cmd()
+        print("running: " + " ".join(cmd))
+        r = subprocess.run(cmd)
+        if r.returncode:
+            raise RuntimeError(f"upgrade failed (exit {r.returncode})")
+    new = subprocess.run([EXE, "--version"], capture_output=True, text=True).stdout.strip()
+    print(f"{new or 'room'} installed (was {__version__}). Hooks pick it up on their next call; nothing to restart.")
+
+
 # ---- hooks ----------------------------------------------------------------------------------------------
 def emit(event, text):
     if text:
@@ -213,6 +296,12 @@ def hook(event):
             for l in links:
                 text.append(f"[room] This session is in link `{l['name']}`: {l['purpose']}. Tell it (`{ROOM} send link:{l['name']} \"…\"`) "
                             "when you change something its members rely on.")
+            try:
+                n = update_notice()
+                if n:
+                    text.append(n)
+            except Exception:
+                pass
             msgs = api("GET", f"/inbox?session={sid}")
             if msgs:
                 text.append(fmt_messages(msgs, sid))
@@ -414,8 +503,10 @@ def main():
             return print(HELP)
         if cmd in ("version", "--version", "-V"):
             return print(f"room {__version__}")
+        if cmd == "_check-latest":
+            return check_latest()
         fn = {"who": cmd_who, "send": cmd_send, "inbox": cmd_inbox, "wait": cmd_wait, "status": cmd_status,
-              "link": cmd_link, "thread": cmd_thread, "join": cmd_join}.get(cmd)
+              "link": cmd_link, "thread": cmd_thread, "join": cmd_join, "update": cmd_update}.get(cmd)
         if cmd == "install-hooks":
             return install_hooks()
         if not fn:

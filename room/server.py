@@ -113,6 +113,10 @@ class Room:
         elif to.startswith("repo:"):
             rcpt = {s["id"] for s in self.q("SELECT id FROM sessions WHERE repo=? AND ended IS NULL AND last_seen>?",
                                             to[5:], time.time() - LIVE_FOR)}
+        elif to == "all" or to.startswith("host:"):   # every live session, or every live one on one host
+            rows = self.q("SELECT id, host FROM sessions WHERE ended IS NULL AND last_seen>? AND id NOT LIKE 'human:%'",
+                          time.time() - LIVE_FOR)
+            rcpt = {r["id"] for r in rows if to == "all" or r["host"].lower() == to[5:].lower()}
         else:
             sid = self.resolve_session(to)
             if not sid:

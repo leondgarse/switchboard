@@ -79,7 +79,7 @@ controls a session; sessions only post and receive.
 - **Same-file heads-up:** if another live session edited the same file in the last 20 minutes, the editor is told.
 - Sessions find their own id by walking up the process tree to Claude Code's `~/.claude/sessions/<pid>.json`.
 
-    room who | send <name@host|link:X|repo:X> "msg" [--ask] | send <to> --re ID "msg" | wait ID | inbox | status "…" | link … | thread [NAME]
+    room who | send <name@host|link:X|repo:X|host:X|all> "msg" [--ask] | send <to> --re ID "msg" | wait ID | inbox | status "…" | link … | thread [NAME]
 
 Links now: `ocr-accuracy` (ocr-bench ⇄ keystone-ai-system/ai-core, watching `*ocr*`) and `meeting-asr`
 (qwen_asr_web `server.py`/`web_server.py` ⇄ case-demos `toolbox/meeting/server/*`).
@@ -88,7 +88,7 @@ Links now: `ocr-accuracy` (ocr-bench ⇄ keystone-ai-system/ai-core, watching `*
 |---|---|
 | Update all hosts | `room/deploy.sh [--restart]` (hosts from cc-menubar's config; server host `MS`) |
 | Someone else joins (any host on the LAN) | `pipx install switchboard-room && room join http://<MS-IP>:8766 <token> --host <name>` (see `room/README.md`) |
-| Release to PyPI | Bump `__version__` in `room/room.py`, then `git tag v<version> && git push origin v<version>`; `.github/workflows/publish.yml` publishes with trusted publishing |
+| Release to PyPI | Bump `__version__` in `room/room.py`, then `git tag v<version> && git push origin v<version>`; `.github/workflows/publish.yml` publishes with trusted publishing. Colleagues' first session after that is told to run `room update`; to push it now, `room send all "room <version> is out: run room update"` |
 | Server on MS | cron runs `ensure-server.sh` (from `room/`, deployed to `~/.local/share/switchboard/`) every 5 min and at boot. Data in `~/.local/share/switchboard/room.db` |
 | Config on each host | `~/.config/switchboard/room.json` `{url, token, host}` (mode 600). The server address is MS's LAN IP |
 | Remove hooks | Restore `~/.claude/settings.json.bak-switchboard`, or delete the `room hook` entries |

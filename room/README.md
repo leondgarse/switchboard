@@ -13,7 +13,8 @@ https://github.com/leondgarse/switchboard (`room/`).
 `~/.claude/settings.json` (a backup is kept at `settings.json.bak-switchboard`). Start a new Claude Code session
 and it is in the room. `room who` lists sessions; `room help` shows every command.
 
-Upgrade with `pipx upgrade switchboard-room`. To leave, delete the `room hook` entries from `~/.claude/settings.json`.
+Upgrade with `room update` (it runs pipx, uv tool or pip, whichever installed it). When a new version is out, the
+first Claude Code session to start on your machine is told once and can run it for you. To leave, delete the `room hook` entries from `~/.claude/settings.json`.
 
 Everyone shares one token, and messages arrive in your sessions as context: join only rooms of people you trust.
 Traffic is plain HTTP, so use it on a trusted network.
