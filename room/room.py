@@ -222,7 +222,7 @@ def update_cmd():
     if (pre / "pipx_metadata.json").exists() and shutil.which("pipx"):
         return ["pipx", "upgrade", PKG]
     if (pre / "uv-receipt.toml").exists() and shutil.which("uv"):
-        return ["uv", "tool", "upgrade", PKG]
+        return ["uv", "tool", "install", PKG + "@latest"]   # `uv tool upgrade` would keep an install-time pin
     if subprocess.run([sys.executable, "-m", "pip", "--version"], capture_output=True).returncode == 0:
         return [sys.executable, "-m", "pip", "install", "-U", PKG]
     if shutil.which("uv"):
@@ -244,7 +244,13 @@ def cmd_update(a):
         if r.returncode:
             raise RuntimeError(f"upgrade failed (exit {r.returncode})")
     new = subprocess.run([EXE, "--version"], capture_output=True, text=True).stdout.strip()
-    print(f"{new or 'room'} installed (was {__version__}). Hooks pick it up on their next call; nothing to restart.")
+    if new == f"room {__version__}":
+        latest = latest_cached().get("version")
+        print(f"still room {__version__}" + (f" (PyPI has {latest}: the installer kept the old version, perhaps a "
+                                              f"version pin; reinstall with: {' '.join(cmd)})" if latest and
+                                              vtuple(latest) > vtuple(__version__) else ": already the newest."))
+    else:
+        print(f"{new or 'room'} installed (was {__version__}). Hooks pick it up on their next call; nothing to restart.")
 
 
 # ---- hooks ----------------------------------------------------------------------------------------------
