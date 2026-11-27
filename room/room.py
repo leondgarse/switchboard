@@ -31,34 +31,58 @@ def _exe():
 EXE = _exe()
 ROOM = "~" + EXE[len(str(Path.home())):] if EXE.startswith(str(Path.home()) + os.sep) else EXE
 
-HELP = f"""room: message other Claude Code sessions (this machine or others).
+HELP_SECTIONS = [
+    ("Messaging", "for sessions: use it only when another session needs to know or answer something", [
+        ("who", "sessions (live/exited), what they do, their links"),
+        ('send <to> "msg" [--ask]', "to = name@host (as in `who`) | id prefix | link:NAME | repo:REPO | host:NAME | all"),
+        ('send <to> --re <id> "msg"', "answer message #id"),
+        ("wait <id> [--timeout 1800]", "block until #id is answered. Run it as a background command whenever you need an "
+                                       "answer: it wakes this session when the answer arrives, even if idle"),
+        ("inbox [--peek]", 'unread messages (they also arrive on their own as "[room]" context)'),
+        ('status "now: …"', "one line on what this session is doing, shown to others"),
+        ('link list | create NAME "purpose"', "links group sessions or whole repos on one topic"),
+        ("link join NAME [--repo [REPO]] [--watch GLOB]…", "files matching --watch globs (repo-relative) auto-notify the link when edited"),
+        ("link leave NAME [--repo [REPO]]", "leave a link (as this session, or for the whole repo)"),
+        ("thread [NAME]", "recent messages (all, or one link)"),
+    ], "Keep messages short and concrete. Don't poll. Don't end a turn saying you are waiting for an answer unless "
+       "`room wait` is running in the background; an idle session gets messages only at its next prompt."),
+    ("Update", "any session may run it when told a new room is out", [
+        ("update", "upgrade room on this machine (pipx, uv tool or pip, whichever installed it)"),
+        ("--version", "the installed version"),
+    ], ""),
+    ("Set up this machine", "once, by a person", [
+        ("join <url> <token> [--host NAME]", "write the config, check the server, install the hooks"),
+        ("install-hooks", "(re)install only the hooks in ~/.claude/settings.json"),
+    ], ""),
+    ("Run a room server", "on one machine, by a person", [
+        ("serve [--port 8766]", "serve a room here; the first run makes a token and prints the join line"),
+        ("serve --service", "print a launchd/systemd unit that keeps it running"),
+    ], ""),
+]
 
-Messaging (use it only when another session needs to know or answer something):
-  {ROOM} who                         sessions (live/exited), what they do, their links
-  {ROOM} send <to> "msg" [--ask]     to = name@host (as in `who`) | id prefix | link:NAME | repo:REPO | host:NAME | all
-  {ROOM} send <to> --re <id> "msg"   answer message #id
-  {ROOM} wait <id> [--timeout 1800]  block until #id is answered. Run it as a background command whenever you
-                                     need an answer: it wakes this session when the answer arrives, even if idle
-  {ROOM} inbox [--peek]              unread messages (they also arrive on their own as "[room]" context)
-  {ROOM} status "now: …"             one line on what this session is doing, shown to others
-  {ROOM} link list | create NAME "purpose" | join NAME [--repo [REPO]] [--watch GLOB]… | leave NAME [--repo [REPO]]
-                                     links group sessions or whole repos on one topic; files matching
-                                     --watch globs (repo-relative) auto-notify the link when edited
-  {ROOM} thread [NAME]               recent messages (all, or one link)
-Keep messages short and concrete. Don't poll. Don't end a turn saying you are waiting for an answer
-unless `room wait` is running in the background; an idle session gets messages only at its next prompt.
 
-Update (any session may run it when told a new room is out):
-  {ROOM} update                      upgrade room on this machine (pipx, uv tool or pip, whichever installed it)
-  {ROOM} --version                   the installed version
-
-Set up this machine (once, by a person):
-  {ROOM} join <url> <token> [--host NAME]   write the config, check the server, install the hooks
-  {ROOM} install-hooks               (re)install only the hooks in ~/.claude/settings.json
-
-Run a room server (on one machine, by a person):
-  {ROOM} serve [--port 8766]         serve a room here; the first run makes a token and prints the join line
-  {ROOM} serve --service             print a launchd/systemd unit that keeps it running"""
+def help_text(color=None):
+    """Grouped help. Colors only for a person at a terminal (sessions read it too), and never with NO_COLOR."""
+    import shutil, textwrap
+    if color is None:
+        color = sys.stdout.isatty() and not os.environ.get("NO_COLOR") and os.environ.get("TERM") != "dumb"
+    c = (lambda code, t: f"\033[{code}m{t}\033[0m") if color else (lambda code, t: t)
+    width = min(shutil.get_terminal_size((100, 24)).columns, 120)
+    col = max(len(u) for _, _, cmds, _ in HELP_SECTIONS for u, _ in cmds if len(u) <= 34) + 4
+    out = [f"{c('1', 'room')}: message other Claude Code sessions (this machine or others). Command: {ROOM}"]
+    for title, who, cmds, note in HELP_SECTIONS:
+        out += ["", f"{c('1;34', title.upper())}  {c('2', '(' + who + ')')}"]
+        for usage, desc in cmds:
+            lines = textwrap.wrap(desc, max(30, width - col - 2)) or [""]
+            if len(usage) + 2 > col:   # long usage: description goes on the next line
+                out.append("  " + c("32", usage))
+                out += [" " * (col + 2) + l for l in lines if l]
+            else:
+                out.append("  " + c("32", usage) + " " * (col - len(usage)) + lines[0])
+                out += [" " * (col + 2) + l for l in lines[1:]]
+        if note:
+            out += ["  " + c("2", l) for l in textwrap.wrap(note, width - 4)]
+    return "\n".join(l.rstrip() for l in out)
 
 
 def cfg():
@@ -574,7 +598,7 @@ def main():
         if cmd == "hook":
             return hook(args[0] if args else "")
         if cmd in ("help", "-h", "--help"):
-            return print(HELP)
+            return print(help_text())
         if cmd in ("version", "--version", "-V"):
             return print(f"room {__version__}")
         if cmd == "_check-latest":
@@ -585,7 +609,7 @@ def main():
         if cmd == "install-hooks":
             return install_hooks()
         if not fn:
-            print(HELP)
+            print(help_text())
             sys.exit(2)
         fn(args)
     except (RuntimeError, OSError, urllib.error.URLError) as e:
