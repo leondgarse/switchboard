@@ -185,6 +185,12 @@
   .ysec .pgh { display: flex; gap: 8px; align-items: baseline; font: 600 12px var(--mono); color: var(--text); margin: 0 0 4px; }
   .ysec .pgh span[data-pf] { cursor: pointer; } .ysec .pgh span[data-pf]:hover { color: var(--accent); }
   .ysec .pgr { font: 10.5px var(--mono); color: var(--muted); font-weight: 400; } .ysec .pgn { font: 10.5px var(--mono); color: var(--muted); font-weight: 400; margin-left: auto; }
+  .ysec .pgr.lk { cursor: pointer; } .ysec .pgr.lk:hover { color: var(--accent); } .ysec .pgr.none { opacity: .55; }
+  .ysec .pgh select { background: var(--bg); color: var(--text); border: 1px solid var(--accent); border-radius: 4px; font: 10.5px var(--mono); padding: 0 2px; }
+  .padd { font: 600 11px var(--mono); color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; line-height: 15px; cursor: pointer; letter-spacing: 0; text-transform: none; }
+  .padd:hover { color: var(--accent); border-color: var(--accent); } .pcard .sub .padd { margin-left: auto; }
+  .tnew { margin: 2px 0 6px; } .tnew input { width: 100%; box-sizing: border-box; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 4px 8px; font: 12px var(--mono); }
+  .tnew input:focus { outline: 1px solid var(--accent); }
   .ysec .sub { font: 600 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 4px 0; }
   .ri { display: flex; gap: 8px; padding: 2px 2px; font: 11.5px var(--mono); color: #c9ccd3; cursor: pointer; }
   .ri:hover { color: var(--text); } .ri .st { flex: none; width: 14px; }
@@ -611,7 +617,7 @@ function renderRoom() {
 }
 
 // ---------- tasks tab ----------
-const tstate = { open: new Set(), more: new Set(), view: localStorage.getItem('sb-tview') || 'yours', project: '', q: '', closed: localStorage.getItem('sb-tclosed') !== '0' };
+const tstate = { linking: '', adding: null, open: new Set(), more: new Set(), view: localStorage.getItem('sb-tview') || 'yours', project: '', q: '', closed: localStorage.getItem('sb-tclosed') !== '0' };
 function reloadTasks() {
   const sc = document.createElement('script');
   sc.src = 'tasks/tasks.js?' + Date.now();
@@ -685,7 +691,29 @@ function taskRow(t, R, opts = {}) {
   return h;
 }
 
+// the repo next to a project's name in "Yours": click it to pick another one (tasks.py edit <id> repo=…)
+function repoLabel(p, repo) {
+  if (tstate.linking === p) {
+    const ids = Object.keys(repos).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    if (repo && !ids.includes(repo)) ids.unshift(repo);
+    return `<select class="prepo" data-proj="${esc(p)}"><option value="">no repo</option>`
+      + ids.map(r => `<option${r === repo ? ' selected' : ''}>${esc(r)}</option>`).join('') + '<option value="__other">other folder…</option></select>';
+  }
+  return `<span class="pgr lk${repo ? '' : ' none'}" data-link="${esc(p)}" title="${repo ? 'repo: ' + esc(repo) + '. Click to change' : 'Click to link a repo'}">${repo ? '· ' + esc(repo) : '+ repo'}</span>`;
+}
+// "+" on a project's sub title opens an inline input that adds a task to that project (tstate.adding = { p, sec, v })
+const addBtn = (p, sec) => `<span class="padd" data-add="${esc(p)}" data-sec="${sec}" title="add a task to ${esc(p)}">+</span>`;
+const addForm = (p, sec) => tstate.adding && tstate.adding.p === p && tstate.adding.sec === sec
+  ? `<form class="tnew"><input class="tnewi" value="${esc(tstate.adding.v)}" placeholder="new task in ${esc(p)}… (Enter adds, Esc cancels; “! ” = high priority, “- ” = no review)" autocomplete="off"></form>` : '';
 function renderTasks() {
+  const a = tstate.adding, prev = document.activeElement?.classList.contains('tnewi') ? document.activeElement : null;
+  const caret = prev ? [prev.selectionStart, prev.selectionEnd, prev.selectionDirection] : null;   // a refresh keeps the cursor where it was
+  renderTasksInner();
+  const i = a && (a.focus || prev) && document.querySelector('#tgrid .tnewi');
+  if (i) { i.focus(); caret ? i.setSelectionRange(...caret) : i.setSelectionRange(i.value.length, i.value.length); }
+  if (a) a.focus = false;
+}
+function renderTasksInner() {
   const T = window.TASKS, grid = document.getElementById('tgrid'), meta = document.getElementById('tmeta');
   document.querySelectorAll('#tview button').forEach(b => b.classList.toggle('on', b.dataset.v === tstate.view));
   if (!T) { grid.innerHTML = '<div class="empty">No task data yet: run <code>python3 tasks/tasks.py collect</code>.</div>'; return; }
@@ -721,7 +749,7 @@ function renderTasks() {
     h += `<div class="pcard"><div class="ph"><span class="pn">${esc(c.name)}</span>${c.repo && c.repo !== c.name ? `<span class="pr" data-goto="${esc(c.repo)}">${esc(c.repo)}</span>` : ''}`
       + `<span class="sq">${sess.map(s => `<i style="background:${kindCol[kindOf(s.status)]}" title="${esc(sessTip(s))}"></i>`).join('')}</span></div>`;
     if (c.tasks.length) {
-      h += `<div class="sub">yours</div>`;
+      h += `<div class="sub">yours${addBtn(c.name, 'b')}</div>` + addForm(c.name, 'b');
       for (const t of c.tasks.slice().sort(cmpTasks)) h += taskRow(t, R);
     }
     for (const f of c.files) {
@@ -748,7 +776,7 @@ function renderYours(T, R, grid) {
   const shown = all.filter(t => (!pf || t.project === pf) && (!q || (t.text + ' ' + t.project + ' ' + ((R[t.id] || {}).title || '')).toLowerCase().includes(q)));
   const doing = shown.filter(t => t.state === 'doing').sort(cmpTasks);
   const next = shown.filter(t => t.state === 'open').sort(cmpTasks);
-  const closed = shown.filter(t => t.state === 'done' || t.state === 'dropped').sort((a, b) => (b.done || '').localeCompare(a.done || ''));
+  const closed = shown.filter(t => t.state === 'done').sort(   // dropped tasks stay in tasks.md as [-] but aren't shown(a, b) => (b.done || '').localeCompare(a.done || ''));
   const late = active.filter(t => t.due && t.due < todayKey()).length, high = active.filter(t => t.pri === 'high').length;
   const soon = active.filter(t => t.due && t.due >= todayKey() && t.due <= new Date(Date.now() + 7 * 864e5).toLocaleDateString('sv')).length;
   const weekAgo = new Date(Date.now() - 7 * 864e5).toLocaleDateString('sv');
@@ -767,8 +795,8 @@ function renderYours(T, R, grid) {
   const groups = list => order.map(p => [p, list.filter(t => t.project === p)]).filter(([, l]) => l.length);
   const sec = (title, list, empty) => `<div class="ysec"><div class="sub">${title} · ${list.length}</div>`
     + (groups(list).map(([p, l]) => `<div class="pg"><div class="pgh"><span data-pf="${esc(p)}">${esc(p)}</span>`
-      + `${repoKey(l[0].repo) && repoKey(l[0].repo) !== p ? `<span class="pgr">${esc(repoKey(l[0].repo))}</span>` : ''}<span class="pgn">${l.length}</span></div>`
-      + l.map(t => taskRow(t, R)).join('') + '</div>').join('')
+      + repoLabel(p, l[0].repo) + `<span class="pgn">${l.length}</span>${addBtn(p, title)}</div>`
+      + addForm(p, title) + l.map(t => taskRow(t, R)).join('') + '</div>').join('')
       || `<div class="fl" style="font:11.5px var(--mono);color:var(--muted)">${empty}</div>`) + '</div>';
   h += `<div class="ycols${tstate.closed ? '' : ' one'}"><div class="ymain">`;
   if (doing.length) h += sec('in progress', doing, '');
@@ -802,7 +830,19 @@ function renderYours(T, R, grid) {
 }
 
 document.getElementById('tgrid').addEventListener('click', ev => {
-  const a = ev.target.closest('[data-act],[data-more],[data-path],[data-goto],[data-pf],[data-jump]'); if (!a) return;
+  const a = ev.target.closest('[data-act],[data-more],[data-path],[data-goto],[data-pf],[data-jump],[data-add],[data-link]'); if (!a) return;
+  if (a.dataset.link !== undefined) {
+    if (!SERVED) return alert('Linking a repo needs cc-menubar\'s board or serve.py.');
+    tstate.linking = a.dataset.link; renderTasks();
+    const s = document.querySelector('#tgrid select.prepo'); if (s) { s.focus(); s.showPicker?.(); }
+    return;
+  }
+  if (a.dataset.add !== undefined) {
+    if (!SERVED) return alert('Adding needs cc-menubar\'s board or serve.py.');
+    const p = a.dataset.add, sec = a.dataset.sec, o = tstate.adding;
+    tstate.adding = o && o.p === p && o.sec === sec ? null : { p, sec, v: '', focus: true };
+    return renderTasks();
+  }
   if (a.dataset.goto) { setTab('arch'); select(a.dataset.goto); return; }
   if (a.dataset.pf !== undefined) { tstate.project = tstate.project === a.dataset.pf ? '' : a.dataset.pf; return renderTasks(); }
   if (a.dataset.jump) { tstate.open.add(a.dataset.jump); renderTasks(); document.querySelector(`.ti[data-tid="${a.dataset.jump}"]`)?.scrollIntoView({ block: 'center' }); return; }
@@ -837,6 +877,16 @@ function undoToast(msg, undo) {
 }
 document.getElementById('tgrid').addEventListener('change', ev => {
   const a = ev.target;
+  if (a.classList.contains('prepo')) {
+    const p = a.dataset.proj, t = window.TASKS.tasks.find(x => x.project === p);
+    let r = a.value;
+    if (r === '__other') r = (prompt('Folder under ~/workspace (e.g. keystone-ai-system/pdf_adapter):') || '').trim().replace(/^\/+|\/+$/g, '');
+    tstate.linking = '';
+    if (!t || r === '__other' || (a.value === '__other' && !r)) return renderTasks();
+    for (const x of window.TASKS.tasks) if (x.project === p) x.repo = r;
+    renderTasks(); taskAction(['edit', t.id, 'repo=' + r]);
+    return;
+  }
   if (a.id === 'tclosed') { tstate.closed = a.checked; localStorage.setItem('sb-tclosed', a.checked ? '1' : '0'); return renderTasks(); }
   const id = a.closest('.tdet')?.previousElementSibling?.dataset.tid, t = window.TASKS.tasks.find(x => x.id === id);
   if (!t || !SERVED) return;
@@ -847,7 +897,25 @@ document.getElementById('tgrid').addEventListener('change', ev => {
     t.project = p; renderTasks(); taskAction(['edit', id, 'project=' + p]);
   }
 });
-document.getElementById('tgrid').addEventListener('input', ev => { if (ev.target.id === 'tq') { tstate.q = ev.target.value; renderTasks(); } });
+document.getElementById('tgrid').addEventListener('input', ev => {
+  if (ev.target.id === 'tq') { tstate.q = ev.target.value; renderTasks(); }
+  if (ev.target.classList.contains('tnewi') && tstate.adding) tstate.adding.v = ev.target.value;
+});
+document.getElementById('tgrid').addEventListener('submit', ev => {
+  if (!ev.target.classList.contains('tnew') || !tstate.adding) return;
+  ev.preventDefault();
+  const { p, v } = tstate.adding, text = v.trim();
+  tstate.adding = null;   // one task per "+": add it (tasks.py add reviews it in the background) and close
+  renderTasks();
+  if (text) taskAction(['add', p, text]);
+});
+document.getElementById('tgrid').addEventListener('focusout', ev => {
+  if (ev.target.classList?.contains('prepo') && tstate.linking) setTimeout(() => { if (tstate.linking && !document.activeElement?.classList.contains('prepo')) { tstate.linking = ''; renderTasks(); } }, 150);
+});
+document.getElementById('tgrid').addEventListener('keydown', ev => {
+  if (ev.key === 'Escape' && ev.target.classList.contains('prepo')) { tstate.linking = ''; renderTasks(); }
+  if (ev.key === 'Escape' && ev.target.classList.contains('tnewi')) { tstate.adding = null; renderTasks(); }
+});
 document.getElementById('tview').addEventListener('click', ev => {
   const v = ev.target.closest('button')?.dataset.v; if (!v) return;
   tstate.view = v; localStorage.setItem('sb-tview', v); renderTasks();

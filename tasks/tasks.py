@@ -5,6 +5,7 @@
   tasks.py add "<project>" "<task text>"    add one task (then reviews it in the background)
   tasks.py set <id> open|doing|done|dropped change a task's state
   tasks.py edit <id> key=value …            change text=, project=, pri=high|"", review=skip|"" or due=YYYY-MM-DD|""
+                                            (repo=<folder under ~/workspace>|"" relinks the task's whole project)
   (add: start the text with "! " for high priority, "- " to skip the review; both work: "! - text")
   tasks.py review [<id>…] [--all]           ask Claude whether new tasks are clear + for a short proposal
   tasks.py collect                          read tasks.md and the repos' TODO.md files into tasks.js
@@ -135,6 +136,10 @@ def edit_task(t, tasks, changes):
             tasks.remove(t)   # move it to the end of its new project
             idx = max((i for i, x in enumerate(tasks) if x["project"] == v), default=len(tasks) - 1) + 1
             tasks.insert(idx, t)
+        elif k == "repo" and (v == "" or (WORKSPACE / v).is_dir()):
+            for x in tasks:   # the repo belongs to the project heading, so every task of the project moves with it
+                if x["project"] == t["project"]:
+                    x["repo"] = v
         elif k == "pri" and v in ("", "high"):
             t["pri"] = v
         elif k == "review" and v in ("", "skip"):
