@@ -7,3 +7,6 @@ __pycache__/
 tasks/tasks.js
 dist/
 *.egg-info/
+# personal: your task list and its reviews, written by the Tasks tab
+tasks/tasks.md
+tasks/reviews.json

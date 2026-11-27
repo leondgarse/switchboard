@@ -43,7 +43,7 @@ Session data comes from [cc-menubar](../cc-menubar), which already polls every h
   Closed in a column on the right (the **closed** box hides it), grouped by week: this week and last week open,
   older weeks collapsed. Click a checkbox there to reopen a task. Ordering is doing first, then ★, then due date, then oldest. **Repo boards** is one card per project, with your
   tasks next to that repo's TODO files and live sessions.
-- **Your tasks** live in `tasks/tasks.md` (first imported from Todolist's CSV export: `tasks.py import-todoist <csv>`).
+- **Your tasks** live in `tasks/tasks.md`, which is gitignored along with `tasks/reviews.json`; both are created on first use (first imported from Todolist's CSV export: `tasks.py import-todoist <csv>`).
   In the tab: add (start with `! ` for high priority, `- ` to skip Claude's review, or both: `! - …`), tick, ☆ star, and click a task for Start/Pause, a due date, moving
   it to another project, editing the text, or dropping it. Project headings link to repos (`## OCR · repo: ocr-bench`).
   **Skip review** (or the `- ` prefix) marks a task `review:skip`: it is never reviewed automatically, but **Review now**
