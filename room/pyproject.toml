@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "switchboard-room"
 dynamic = ["version"]
-description = "Let Claude Code sessions on any host message each other through a small room server"
+description = "Let Claude Code sessions on any host message each other through a small room server (client and server)"
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [{ name = "leondgarse" }]
@@ -18,7 +18,7 @@ Homepage = "https://github.com/leondgarse/switchboard"
 room = "room:main"
 
 [tool.setuptools]
-py-modules = ["room"]
+py-modules = ["room", "room_server"]
 
 [tool.setuptools.dynamic]
 version = { attr = "room.__version__" }

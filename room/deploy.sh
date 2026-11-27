@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copy room.py (and server.py to the server host) to every host in cc-menubar's config and re-install hooks.
+# Copy room.py (and room_server.py to the server host) to every host in cc-menubar's config and re-install hooks.
 #   ./deploy.sh            # all hosts
 # Server host: SERVER_HOST (default MS). The server restarts on the next cron tick (or now, with --restart).
 set -e
@@ -17,10 +17,10 @@ while read -r name dest; do
   else
     ssh -o BatchMode=yes "$dest" 'mkdir -p ~/.local/share/switchboard' </dev/null
     scp -q room.py "$dest":.local/share/switchboard/ </dev/null
-    [ "$name" = "$SERVER_HOST" ] && scp -q server.py ensure-server.sh "$dest":.local/share/switchboard/ </dev/null
+    [ "$name" = "$SERVER_HOST" ] && scp -q room_server.py ensure-server.sh "$dest":.local/share/switchboard/ </dev/null
     ssh -o BatchMode=yes "$dest" "$inst" </dev/null
     if [ "$name" = "$SERVER_HOST" ] && [ "$1" = "--restart" ]; then
-      ssh "$dest" 'pkill -f "share/switchboard/server.py"; sleep 1; ~/.local/share/switchboard/ensure-server.sh' </dev/null
+      ssh "$dest" 'pkill -f "share/switchboard/(room_)?server.py"; rm -f ~/.local/share/switchboard/server.py; sleep 1; ~/.local/share/switchboard/ensure-server.sh' </dev/null
     fi
   fi
   echo "deployed: $name"

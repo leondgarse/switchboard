@@ -64,7 +64,7 @@ Session data comes from [cc-menubar](../cc-menubar), which already polls every h
 
 ## Room: sessions messaging each other across hosts
 
-`room/` has a small mailbox for Claude Code sessions. One server (`room/server.py`, HTTP + SQLite, stdlib only) runs on the
+`room/` has a small mailbox for Claude Code sessions. One server (`room/room_server.py`, HTTP + SQLite, stdlib only) runs on the
 Mac Studio. Each host gets the `room` CLI (`~/.local/bin/room`) and five hooks in `~/.claude/settings.json`. Nothing
 controls a session; sessions only post and receive.
 

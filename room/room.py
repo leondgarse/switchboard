@@ -6,7 +6,7 @@ there is something to deliver, and never fail the session.
 Config: ~/.config/switchboard/room.json {"url": "http://<server>:8766", "token": "...", "host": "<label>"}
 (`room join <url> <token> [--host NAME]` writes it and installs the hooks). Python 3.9+, stdlib only.
 """
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 import glob, json, os, re, socket, subprocess, sys, time, urllib.error, urllib.request
 from pathlib import Path
@@ -45,6 +45,8 @@ session needs to know or answer something.
                                      --watch globs (repo-relative) auto-notify the link when edited
   {ROOM} thread [NAME]               recent messages (all, or one link)
   {ROOM} join <url> <token> [--host NAME]   set up this machine: write the config and install the hooks
+  {ROOM} serve [--port 8766] [--service]   run a room server here (makes a token on first run); --service prints a
+                                     launchd/systemd unit that keeps it running
   {ROOM} update                      upgrade room on this machine (pipx, uv tool or pip, whichever installed it)
 Keep messages short and concrete. Don't poll. Don't end a turn saying you are waiting for an answer
 unless `room wait` is running in the background; an idle session gets messages only at its next prompt."""
@@ -493,6 +495,69 @@ def cmd_join(args):
     print("done: new Claude Code sessions join the room. Try `room who`.")
 
 
+def lan_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("10.255.255.255", 1))   # no packet is sent; it picks the interface a LAN peer would reach
+        return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        s.close()
+
+
+SERVICE_MAC = """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.switchboard.room</string>
+  <key>ProgramArguments</key><array><string>{exe}</string><string>serve</string><string>--port</string><string>{port}</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>{log}</string>
+  <key>StandardErrorPath</key><string>{log}</string>
+</dict></plist>
+<!-- save as ~/Library/LaunchAgents/com.switchboard.room.plist, then:
+     launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.switchboard.room.plist -->"""
+
+SERVICE_LINUX = """[Unit]
+Description=switchboard room server
+After=network-online.target
+
+[Service]
+ExecStart={exe} serve --port {port}
+Restart=always
+
+[Install]
+WantedBy=default.target
+# save as ~/.config/systemd/user/switchboard-room.service, then:
+#   systemctl --user enable --now switchboard-room && loginctl enable-linger $USER"""
+
+
+def cmd_serve(args):
+    port = int(opt(args, "--port", "8766") or 8766)
+    if opt(args, "--service", flag=True):
+        tpl = SERVICE_MAC if sys.platform == "darwin" else SERVICE_LINUX
+        return print(tpl.format(exe=EXE, port=port, log=Path.home() / ".local" / "share" / "switchboard" / "server.log"))
+    import room_server, secrets
+    c = cfg()
+    if not os.environ.get("ROOM_TOKEN") and not c.get("token"):
+        # first run: this machine becomes the server and also a member of its own room
+        c.update(token=secrets.token_urlsafe(24), url=f"http://127.0.0.1:{port}",
+                 host=c.get("host") or socket.gethostname().split(".")[0])
+        CFG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(CFG_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(json.dumps(c, indent=2) + "\n")
+        print(f"new room: token saved in {CFG_PATH}. Run `{ROOM} install-hooks` so sessions here join too.")
+    token = os.environ.get("ROOM_TOKEN") or c.get("token")
+    shown = token if sys.stdout.isatty() else f"<token from {CFG_PATH}>"   # never into a service's log file
+    print(f"others join with:\n  pipx install {PKG}\n  room join http://{lan_ip()}:{port} {shown} --host <their-name>\n"
+          "Anyone with the token can post into the Claude sessions in this room: share it only with people you trust, "
+          "on a network you trust (plain HTTP). Ctrl-C stops the server.", flush=True)
+    os.environ["ROOM_TOKEN"] = token
+    room_server.main(["--port", str(port)] + args)
+
+
 def main():
     args = sys.argv[1:]
     cmd = args.pop(0) if args else "help"
@@ -506,7 +571,8 @@ def main():
         if cmd == "_check-latest":
             return check_latest()
         fn = {"who": cmd_who, "send": cmd_send, "inbox": cmd_inbox, "wait": cmd_wait, "status": cmd_status,
-              "link": cmd_link, "thread": cmd_thread, "join": cmd_join, "update": cmd_update}.get(cmd)
+              "link": cmd_link, "thread": cmd_thread, "join": cmd_join, "update": cmd_update,
+              "serve": cmd_serve}.get(cmd)
         if cmd == "install-hooks":
             return install_hooks()
         if not fn:

@@ -4,12 +4,12 @@
 One small HTTP + SQLite service on the LAN. It stores sessions, links and messages and does nothing on its
 own: sessions (through their hooks and the `room` CLI) post and fetch. No agent runs here.
 
-  python3 server.py [--host 0.0.0.0] [--port 8766] [--db ~/.local/share/switchboard/room.db]
+  room serve   (or: python3 room_server.py) [--host 0.0.0.0] [--port 8766] [--db ~/.local/share/switchboard/room.db]
 
 Every request needs `Authorization: Bearer <token>`; the token is read from $ROOM_TOKEN or
 ~/.config/switchboard/room.json ("token"). Python 3.9+, stdlib only.
 """
-import argparse, fnmatch, json, os, re, sqlite3, threading, time
+import argparse, fnmatch, hmac, json, os, re, sqlite3, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -196,7 +196,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def authed(self):
-        if self.headers.get("Authorization", "") == "Bearer " + self.token:
+        if hmac.compare_digest(self.headers.get("Authorization", "").encode(), ("Bearer " + self.token).encode()):
             return True
         self.reply(401, {"error": "bad token"})
         return False
@@ -298,12 +298,12 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
-def main():
-    ap = argparse.ArgumentParser()
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="room serve")
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=8766)
     ap.add_argument("--db", default="~/.local/share/switchboard/room.db")
-    a = ap.parse_args()
+    a = ap.parse_args(argv)
     token = os.environ.get("ROOM_TOKEN")
     if not token:
         cfg = Path.home() / ".config" / "switchboard" / "room.json"
